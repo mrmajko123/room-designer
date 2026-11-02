@@ -544,7 +544,7 @@
       h('ol.steps', null,
         h('li', null, h('span', null, h('b', null, 'Set your room size. '), 'Measure your walls and type the lengths in Room, or build it from photos of your walls.')),
         h('li', null, h('span', null, h('b', null, 'Paint and decorate. '), 'Tap a wall to paint it, pick a floor, and add LEDs, shelves, closets and furniture.')),
-        h('li', null, h('span', null, h('b', null, 'Add your own stuff. '), 'Take a photo of your dresser or desk, type its size, and it appears in 3D.'))),
+        h('li', null, h('span', null, h('b', null, 'Add your own stuff. '), 'Scan your dresser, desk or anything else in 3D with your phone (Add → My stuff), check its size, and it appears in your room.'))),
       h('p.hint.small', null, 'Everything is saved on this device. Nothing is uploaded.'));
     await U.modal('Design your room', body, [{ label: 'Let\'s go', value: 'ok', primary: true }]);
     S.settings.welcomed = true;
