@@ -203,17 +203,27 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
 
   // tap a wall and paint it
   await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  // find a bit of wall you can see (not behind furniture) and click it
   const wallPt = await page.evaluate(() => {
     const v = RD.app.viewer;
+    const r = v.renderer.domElement.getBoundingClientRect();
     const ws = RD.geo.walls(RD.store.project.room.points);
-    const visible = ws.map((w, i) => i).filter((i) => !v.hiddenWalls.has(i));
-    const i = visible[0];
-    const w = ws[i];
-    // a free bit of wall: near one end, low down
-    const p = RD.geo.pointOnWall(w, 12);
-    return { i, x: p[0] + w.n[0], z: p[1] + w.n[1] };
+    for (const w of ws) {
+      if (v.hiddenWalls.has(w.i)) continue;
+      for (const f of [0.15, 0.85, 0.5, 0.3, 0.7]) {
+        for (const y of [200, 150, 60]) {
+          const p = RD.geo.pointOnWall(w, w.len * f);
+          const s = v.toScreen(p[0] + w.n[0], y, p[1] + w.n[1]);
+          const hit = v.pick({ clientX: r.left + s.x, clientY: r.top + s.y });
+          if (hit && hit.kind === 'wall' && hit.index === w.i) return { i: w.i, x: r.left + s.x, y: r.top + s.y };
+        }
+      }
+    }
+    return null;
   });
-  const wp = await screenOf(page, wallPt.x, 30, wallPt.z);
+  check(!!wallPt, 'found a visible bit of wall');
+  const wp = { x: wallPt.x, y: wallPt.y };
   await page.mouse.click(wp.x, wp.y);
   await page.waitForTimeout(200);
   const sel = await page.evaluate(() => RD.app.selection);
