@@ -366,6 +366,16 @@
     const full = PT.rectify(img, corners, { focal35, maxOut: 1024, maxSource: 2400, cutout: def.shape === 'cutout', tolerance });
     const texId = await RD.db.putBlob(await canvasBlob(full.canvas, def.shape === 'cutout'), { kind: 'stuff-front' });
     def.front = { photoId, corners, texId, aspect: full.aspect };
+    // side and top photos sent from the phone still need their corners marked
+    if (def.shape === 'box') {
+      for (const [slot, label] of [['side', 'side'], ['top', 'top']]) {
+        const rec = extra[slot];
+        if (!rec || rec.corners) continue;
+        await loadExtra(rec);
+        const c = rec.img ? await PT.markCorners(rec.img, `Mark the ${label}`, null, `Drag the 4 dots onto the corners of the ${label} of your item. Cancel to leave this photo out.`) : null;
+        if (c) { rec.corners = c; rec.changed = true; } else extra[slot] = null;
+      }
+    }
     for (const slot of ['side', 'top']) {
       const rec = extra[slot];
       if (def.shape !== 'box') { def[slot] = null; continue; }

@@ -377,6 +377,34 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   check((await page.inputValue('dialog.modal[open] .wiz-side input.text')) === 'Desk scan', 'scan from the phone opens the size check');
   check(await page.evaluate(() => window.__stopped === true), 'phone link stops when the QR window closes');
   await page.click('dialog.modal[open] footer button:has-text("Cancel")');
+
+  // quick photo scan from the phone: front, side and top photos
+  await page.evaluate(async () => {
+    const mk = (fill, w, h) => { const c = document.createElement('canvas'); c.width = 800; c.height = 800; const x = c.getContext('2d'); x.fillStyle = '#777777'; x.fillRect(0, 0, 800, 800); x.fillStyle = fill; x.fillRect(400 - w / 2, 400 - h / 2, w, h); return new Promise((r) => c.toBlob((b) => r(b), 'image/jpeg', 0.9)); };
+    window.__photos = { front: await mk('#f4f1ea', 400, 500), side: await mk('#d9b88f', 225, 500), top: await mk('#c9a77c', 400, 225) };
+    RD.scanning.phoneDialog();
+  });
+  await page.waitForSelector('dialog.modal[open] .qr svg');
+  await page.evaluate(async () => {
+    for (const step of ['front', 'side', 'top']) window.__emit({ type: 'file', kind: 'photo', step, name: step + '.jpg', mime: 'image/jpeg', data: new Uint8Array(await window.__photos[step].arrayBuffer()) });
+    window.__emit({ type: 'done', kind: 'photos' });
+  });
+  await page.waitForSelector('dialog.modal[open] .ce-stage');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => RD.photoTool.active.set([[200, 650], [600, 650], [600, 150], [200, 150]]));
+  await page.waitForTimeout(300);
+  await page.fill('dialog.modal[open] .wiz-side input.text', 'Phone dresser');
+  await page.click('dialog.modal[open] footer button.primary');
+  for (const [label, c] of [['side', [[287.5, 650], [512.5, 650], [512.5, 150], [287.5, 150]]], ['top', [[200, 512.5], [600, 512.5], [600, 287.5], [200, 287.5]]]]) {
+    await page.waitForSelector(`dialog.modal[open] h2:has-text("Mark the ${label}")`);
+    await page.waitForTimeout(200);
+    await page.evaluate((cc) => RD.photoTool.active.set(cc), c);
+    await page.click('dialog.modal[open] footer button:has-text("Done")');
+  }
+  await page.waitForFunction(() => Array.from(RD.store.stuff.values()).some((d) => d.name === 'Phone dresser'), null, { timeout: 15000 });
+  const phoneDef = await page.evaluate(() => { const d = Array.from(RD.store.stuff.values()).find((x) => x.name === 'Phone dresser'); return { front: !!d.front.texId, side: !!(d.side && d.side.texId), top: !!(d.top && d.top.texId), h: d.h }; });
+  check(phoneDef.front && phoneDef.side && phoneDef.top, 'photos from the phone make a dresser with front, side and top pictures');
+  check(Math.abs(phoneDef.h - 100) < 2, 'its height worked out from the front photo: ' + phoneDef.h);
   await page.evaluate(() => { delete window.roomDesktop; });
 
   // ------------------------------------------------------------ plan view and corner editing
@@ -421,7 +449,7 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   await page.click('#rooms-btn');
   const [roomDl] = await Promise.all([page.waitForEvent('download'), page.click('dialog.modal[open] button:has-text("Save room file")')]);
   const file = JSON.parse(fs.readFileSync(await roomDl.path(), 'utf8'));
-  check(file.format === 'room-designer' && file.stuff.length === 2 && Object.keys(file.blobs).length >= 6, 'room file has the room, my stuff, scans and photos');
+  check(file.format === 'room-designer' && file.stuff.length === 3 && Object.keys(file.blobs).length >= 10, 'room file has the room, my stuff, scans and photos');
   await page.click('#rooms-btn');
   const [roomChooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('dialog.modal[open] button:has-text("Open room file")')]);
   await roomChooser.setFiles(await roomDl.path());

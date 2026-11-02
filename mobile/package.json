@@ -1,6 +1,6 @@
 {
   "name": "room-designer-mobile",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Android and iPhone builds of Room Designer (Capacitor).",
   "license": "MIT",

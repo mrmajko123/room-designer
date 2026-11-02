@@ -1,7 +1,7 @@
 {
   "name": "room-designer-desktop",
   "productName": "Room Designer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Design your room in 3D.",
   "main": "main.js",
   "private": true,
@@ -39,7 +39,14 @@
       "www/**/*"
     ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "Room-Designer-Setup-${version}-Windows-${arch}.${ext}"
     },
     "nsis": {
@@ -50,7 +57,15 @@
       "shortcutName": "Room Designer"
     },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
       "category": "public.app-category.lifestyle",
       "identity": null,
       "artifactName": "Room-Designer-${version}-macOS-${arch}.${ext}",
@@ -59,7 +74,10 @@
       }
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Graphics",
       "synopsis": "Design your room in 3D",
       "maintainer": "Room Designer contributors <room-designer@users.noreply.github.com>",
