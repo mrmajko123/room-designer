@@ -175,9 +175,12 @@
       const w = G.walls(room.points)[it.wall];
       if (it.type === 'ledStrip' || it.type === 'fairyLights') it.w = Math.min(it.w, Math.round(w.len - 10));
       it.w = Math.min(it.w, w.len - 2);
-      if (it.type === 'ledStrip') it.y = room.height - it.h - 2;
-      it.y = U.clamp(it.y, 0, Math.max(0, room.height - it.h - 1));
+      const top = () => v.wallTop(it.wall, it.along - it.w / 2, it.along + it.w / 2);
+      it.along = w.len / 2;
+      if (it.type === 'ledStrip') it.y = top() - it.h - 2;
+      it.y = U.clamp(it.y, 0, Math.max(0, top() - it.h - 1));
       it.along = v.freeAlong(it.wall, it.w, null, it.y, it.h);
+      it.y = U.clamp(it.type === 'ledStrip' ? top() - it.h - 2 : it.y, 0, Math.max(0, top() - it.h - 1));
     } else {
       // beds, desks and closets usually stand against a wall
       const wallish = it.mount === 'floor' && (/^(bed|bunkBed|desk|dresser|wardrobe|bookshelf|tvStand|sofa|nightstand|cubeShelf|shoeRack|clothesRack|radiator|armchair)$/.test(it.type) || it.type === 'custom');
@@ -235,7 +238,10 @@
     const wall = wallIdx != null ? wallIdx : app.viewer.facingWall();
     const w = G.walls(S.project.room.points)[wall];
     const width = Math.min(d.width, w.len - 10);
-    const op = { id: U.uid('o'), type, wall, along: app.viewer.freeAlong(wall, width), width, height: Math.min(d.height, S.project.room.height - 5), sill: d.sill, color: d.color };
+    const along = app.viewer.freeAlong(wall, width);
+    const top = app.viewer.wallTop(wall, along - width / 2, along + width / 2);
+    const height = Math.max(40, Math.min(d.height, top - (d.sill || 0) - 5));
+    const op = { id: U.uid('o'), type, wall, along, width, height, sill: Math.min(d.sill, Math.max(0, top - height - 5)), color: d.color };
     app.change((p) => { p.openings.push(op); }, 'Add ' + d.name.toLowerCase());
     app.viewer.select({ kind: 'opening', id: op.id });
   };
@@ -394,11 +400,34 @@
     refreshPanels();
   }
 
+  /** Start a room: empty, or one of the ready-made rooms (like your attic room). */
+  function roomChoices(selected, onPick) {
+    const opts = [{ key: 'empty', title: 'Empty room', description: 'A 400 × 330 cm rectangle to change to your size' }]
+      .concat(Object.entries(RD.templates || {}).map(([key, t]) => ({ key, title: t.title, description: t.description })));
+    const wrap = h('div.radio-list');
+    const draw = (v) => {
+      wrap.innerHTML = '';
+      for (const o of opts) {
+        const input = h('input', { type: 'radio', name: 'room-template', value: o.key, checked: o.key === v });
+        input.addEventListener('change', () => { draw(o.key); onPick(o); });
+        wrap.append(h('label.radio' + (o.key === v ? '.on' : ''), null, input, h('span', null, o.title, h('small', null, o.description))));
+      }
+    };
+    draw(selected);
+    return wrap;
+  }
+
   async function newRoom() {
-    const name = await U.prompt('New room', 'My room', 'Create');
-    if (name == null) return;
+    let choice = 'empty';
+    const nameIn = h('input.text', { type: 'text', value: 'My room' });
+    const body = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+      roomChoices(choice, (o) => { choice = o.key; nameIn.value = o.key === 'empty' ? 'My room' : RD.templates[o.key].project.name; }),
+      h('label.field', null, h('span', null, 'Name'), nameIn));
+    const ok = await U.modal('New room', body, [{ label: 'Cancel', value: null }, { label: 'Create', value: 'ok', primary: true }]);
+    if (ok !== 'ok') return;
+    const name = nameIn.value.trim();
     await S.saveNow();
-    const p = S.blankProject(name || 'My room');
+    const p = choice === 'empty' ? S.blankProject(name || 'My room') : S.fromTemplate(choice, name);
     app.viewer.cameraPlaced = false;
     app.viewer.select(null, true);
     app.selection = null;
@@ -546,9 +575,22 @@
         h('li', null, h('span', null, h('b', null, 'Paint and decorate. '), 'Tap a wall to paint it, pick a floor, and add LEDs, shelves, closets and furniture.')),
         h('li', null, h('span', null, h('b', null, 'Add your own stuff. '), 'Scan your dresser, desk or anything else in 3D with your phone (Add → My stuff), check its size, and it appears in your room.'))),
       h('p.hint.small', null, 'Everything is saved on this device. Nothing is uploaded.'));
+    let choice = RD.templates && RD.templates.attic ? 'attic' : 'empty';
+    if (RD.templates && Object.keys(RD.templates).length) body.append(h('div.field', { style: { marginTop: '12px' } }, h('span', null, 'Start with'), roomChoices(choice, (o) => { choice = o.key; })));
     await U.modal('Design your room', body, [{ label: 'Let\'s go', value: 'ok', primary: true }]);
     S.settings.welcomed = true;
     saveSettings();
+    if (choice !== 'empty') {
+      // swap the empty room made at the first start for the ready-made one
+      const blank = S.project;
+      const p = S.fromTemplate(choice);
+      app.viewer.cameraPlaced = false;
+      S.set(p);
+      await S.saveNow();
+      if (blank && blank.items.length <= 1) await RD.db.del('rooms', blank.id);
+      app.viewer.focusRoom();
+      refreshPanels();
+    }
   }
 
   // ------------------------------------------------------------------ input

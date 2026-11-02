@@ -8,6 +8,7 @@ Windows, Mac, Linux, Android or iPhone (or the web version, no install).
 
 ## What you can do
 
+- **Sloped ceilings** for attic rooms: the walls, doors, windows and lights follow the slope.
 - **Real sizes, in centimetres and metres.** Rectangle, L-shaped or any shape room. Type the wall lengths (`350` or `3.5m`)
   or drag the corners in the plan view. Set the ceiling height, add doors and windows.
 - **Build the room from photos.** Take a photo of each wall, drag four dots onto the wall's corners and
@@ -23,6 +24,18 @@ Windows, Mac, Linux, Android or iPhone (or the web version, no install).
 - **Look around.** 3D view (the walls in front hide themselves), a plan view with measurements, and a
   walk-around view. Drag things to move them; they snap against walls and stand on desks and shelves.
 - Undo/redo, several rooms, save a picture, export a 3D model (`.glb`), save and open room files.
+
+## Your attic room
+
+`rooms/My attic room.room` is your room built from your measurements: 418 × 586.5 cm, 107 cm low walls at
+the front and back, the ceiling sloping up at 41° to 262 cm (reaching the top 179 cm from each low wall),
+the door 152 cm from the back-left corner (96.5 cm wide) and two 99 cm windows with 32.5 cm between them on
+the right wall. Open it in the app (Your rooms → Open room file), or pick it under Your rooms → New room.
+`rooms/My attic room.glb` is the same room as a 3D model for any 3D viewer.
+
+![My attic room](rooms/My%20attic%20room%20preview.png)
+
+Rebuild these files after changing `js/templates.js` with `node scripts/make-rooms.js`.
 
 ## Scanning your things with your phone
 

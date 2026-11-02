@@ -434,6 +434,25 @@ details.help summary { cursor: pointer; color: var(--ink-2); font-weight: 600; m
   .qr { width: 220px; height: 220px; }
 }
 
+/* sloped ceilings and compass */
+.slope-row { padding: 2px 0 6px; border-bottom: 1px dashed var(--line); }
+.slope-row:last-child { border-bottom: 0; }
+.slope-lbl { background: rgba(255, 90, 54, 0.92); color: #fff; padding: 2px 7px; border-radius: 6px; font-size: 11px; }
+.compass {
+  position: absolute; left: 14px; top: 14px; width: 46px; height: 46px; border-radius: 50%; z-index: 4; pointer-events: none;
+  background: var(--panel); box-shadow: var(--shadow); display: grid; place-items: center;
+}
+.compass .needle { width: 46px; height: 46px; position: relative; transition: transform 0.15s; }
+.compass .needle::before {
+  content: ''; position: absolute; left: 50%; top: 13px; width: 0; height: 0; transform: translateX(-50%);
+  border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 17px solid var(--accent);
+}
+.compass .needle::after {
+  content: ''; position: absolute; left: 50%; top: 30px; width: 0; height: 0; transform: translateX(-50%);
+  border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 11px solid var(--ink-3);
+}
+.compass b { position: absolute; left: 50%; top: 0; transform: translateX(-50%); font-size: 10px; color: var(--accent); }
+
 /* menu */
 .menu-list { display: flex; flex-direction: column; gap: 2px; }
 .menu-list button {

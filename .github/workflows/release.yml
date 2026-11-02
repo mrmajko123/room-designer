@@ -264,6 +264,8 @@ jobs:
         run: |
           node scripts/changelog-notes.js "$V" > notes.md
           cat .github/release-footer.md >> notes.md
+          # ready-made rooms (open the .room file in the app; the .glb is the 3D model for any 3D viewer)
+          for f in rooms/*; do cp "$f" "dist/$(basename "$f" | tr ' ' '-')"; done
           ls -la dist
       - uses: softprops/action-gh-release@v2
         with:

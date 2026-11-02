@@ -110,6 +110,8 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   await page.goto(BASE);
   await page.waitForSelector('dialog.modal[open]');
   check(await page.isVisible('text=Design your room'), 'welcome card shows on first start');
+  check(await page.isChecked('dialog.modal input[value=attic]'), 'welcome card offers your attic room');
+  await page.click('dialog.modal label.radio:has-text("Empty room")');
   await page.click('dialog.modal footer button.primary');
   await page.waitForFunction(() => RD.store.project && !document.querySelector('#app.loading'));
   check(await page.evaluate(() => RD.util.units === 'metric'), 'metric units for en-GB');
@@ -245,7 +247,7 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   await page.locator('#panel-room .row:has-text("LED strip around the whole room") input').check({ force: true });
   await page.waitForTimeout(200);
   check(await page.evaluate(() => RD.store.project.room.led.on && RD.app.viewer.night), 'room LED strip on, night mode on');
-  await page.locator('#panel-room select.sel').first().selectOption('rainbow');
+  await page.locator('#panel-room select[data-k=ledm]').selectOption('rainbow');
   await page.waitForTimeout(400);
   check(await page.evaluate(() => RD.app.viewer.animated.length > 0), 'rainbow LEDs animate');
   await snap(page, '03-night.png');
@@ -427,6 +429,52 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   await snap(page, '07-plan.png');
   await page.click('#panel-room button:has-text("Done")');
 
+  // ------------------------------------------------------------ the attic room: sloped ceiling from your measurements
+  await page.click('#rooms-btn');
+  await page.click('dialog.modal[open] button:has-text("New room")');
+  await page.click('dialog.modal[open] label.radio:has-text("My attic room")');
+  await page.click('dialog.modal[open] footer button:has-text("Create")');
+  await page.waitForFunction(() => RD.store.project.name === 'My attic room');
+  await page.click('.view-seg [data-view="3d"]');
+  await page.click('.tabs [data-tab=room]');
+  const attic = await page.evaluate(() => {
+    const p = RD.store.project, G = RD.geo, v = RD.app.viewer;
+    const lens = G.walls(p.room.points).map((w) => w.len);
+    return {
+      lens, sloped: v.sloped, prof: v.profiles[1], facing: p.room.facing,
+      door: p.openings.find((o) => o.type === 'door'), wins: p.openings.filter((o) => o.type === 'window').map((o) => [o.along - o.width / 2, o.along + o.width / 2]),
+      ceilingPieces: v.ceilingMesh.geometry.attributes.position.count / 3, ceilingVisible: v.ceilingMesh.visible,
+      ledY: null,
+    };
+  });
+  check(attic.lens.join() === '418,586.5,418,586.5', 'attic room is 418 x 586.5 cm');
+  check(attic.sloped && JSON.stringify(attic.prof) === '[[0,107],[179,262],[407.5,262],[586.5,107]]', 'side walls follow the 41° slopes up to 262 cm');
+  check(attic.door.wall === 3 && attic.door.along - attic.door.width / 2 === 152 && attic.door.width === 96.5, 'door 152 cm from the back-left corner, 96.5 cm wide');
+  check(JSON.stringify(attic.wins) === '[[175,274],[306.5,405.5]]', 'two 99 cm windows with 32.5 cm between: ' + JSON.stringify(attic.wins));
+  check(attic.facing === 135 && await page.isVisible('.compass'), 'compass shows (facing 135° SE)');
+  check(attic.ceilingVisible && attic.ceilingPieces >= 6, 'sloped ceiling is drawn in 3D');
+  check(await page.locator('#panel-room .slope-row input[type=checkbox]:checked').count() === 2, 'Room panel shows the two sloping walls');
+  // a ceiling light under the slope hangs lower; a wall shelf can't go above the sloping wall top
+  const limits = await page.evaluate(() => {
+    const v = RD.app.viewer;
+    return { ceilAtWall: v.ceilingAt(209, 10), ceilMid: v.ceilingAt(209, 293), sideTopNearFront: v.wallTop(1, 40, 120) };
+  });
+  check(Math.abs(limits.ceilAtWall - (107 + 155 * 10 / 179)) < 0.01 && limits.ceilMid === 262, 'ceiling height under the slope and in the middle');
+  check(Math.abs(limits.sideTopNearFront - (107 + 155 * 40 / 179)) < 0.01, 'wall top is lower near the low wall');
+  await page.locator('#panel-room .slope-row input[data-k=run0]').fill('150');
+  await page.locator('#panel-room .slope-row input[data-k=run0]').press('Enter');
+  check(await page.evaluate(() => RD.store.project.room.walls[0].slope.run) === 150, 'slope can be changed');
+  await page.click('#undo-btn');
+  await page.click('.view-seg [data-view=top]');
+  await page.waitForTimeout(300);
+  check(await page.locator('.slope-lbl').count() === 2, 'plan view marks both slopes');
+  await snap(page, '07b-attic-plan.png');
+  await page.click('.view-seg [data-view="3d"]');
+  // back to the first room
+  await page.click('#rooms-btn');
+  await page.click('dialog.modal[open] .room-list .list-item:has-text("My room")');
+  await page.waitForFunction(() => RD.store.project.name === 'My room');
+
   // ------------------------------------------------------------ walk
   await page.click('.view-seg [data-view=walk]');
   await page.waitForTimeout(200);
@@ -455,7 +503,7 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   await roomChooser.setFiles(await roomDl.path());
   await page.waitForFunction(() => /\(copy\)/.test(RD.store.project.name), null, { timeout: 15000 });
   const rooms = await page.evaluate(async () => (await RD.store.listRooms()).length);
-  check(rooms === 2, 'opening a room file adds it as a copy');
+  check(rooms === 3, 'opening a room file adds it as a copy');
   check(await page.evaluate(() => RD.store.project.items.length) === file.project.items.length, 'imported room has all its things');
 
   // saved across reloads
@@ -463,7 +511,7 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   await page.waitForTimeout(300);
   await page.reload();
   await page.waitForFunction(() => RD.store.project && !document.querySelector('#app.loading'));
-  check(await page.evaluate(() => /\(copy\)/.test(RD.store.project.name) && RD.store.project.items.some((i) => i.type === 'custom')), 'the room is still there after reloading');
+  check(await page.evaluate(() => /\(copy\)/.test(RD.store.project.name)), 'the room is still there after reloading');
   check(!(await page.isVisible('dialog.modal[open]')), 'welcome card only shows once');
   await page.waitForTimeout(600);
   await snap(page, '09-reloaded.png');

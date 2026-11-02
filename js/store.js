@@ -39,6 +39,15 @@
     return p;
   };
 
+  /** A new room from one of the ready-made rooms (js/templates.js). */
+  S.fromTemplate = function (key, name) {
+    const t = RD.templates && RD.templates[key];
+    if (!t) return S.blankProject(name);
+    const p = U.clone(t.project);
+    Object.assign(p, { id: U.uid('r'), name: name || t.project.name, created: Date.now(), updated: Date.now() });
+    return S.normalize(p);
+  };
+
   /** Makes older or imported rooms complete. */
   S.normalize = function (p) {
     p.room = p.room || {};

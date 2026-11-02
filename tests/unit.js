@@ -29,6 +29,28 @@ const off = G.offsetOutward(r, 10);
 check(near(off[0][0], -10, 1e-9) && near(off[0][1], -10, 1e-9), 'outer wall outline');
 check(G.splitWall(r, 0).length === 5 && G.removeCorner(G.splitWall(r, 0), 1).length === 4, 'split and remove corners');
 
+// ---- Sloped ceilings: an attic room 418 x 586.5 cm, low 107 cm walls at the front and back,
+// rising to 262 cm over 179 cm of floor.
+const attic = {
+  points: G.rect(418, 586.5), height: 262,
+  walls: [{ slope: { knee: 107, run: 179 } }, {}, { slope: { knee: 107, run: 179 } }, {}],
+};
+check(G.hasSlopes(attic), 'attic has slopes');
+check(near(G.ceilingAt(attic, 209, 0), 107, 1e-6) && near(G.ceilingAt(attic, 209, 586.5), 107, 1e-6), 'ceiling is 107 cm at the low walls');
+check(near(G.ceilingAt(attic, 209, 179), 262, 1e-6) && near(G.ceilingAt(attic, 209, 293), 262, 1e-6), 'flat 262 cm ceiling in the middle');
+check(near(G.ceilingAt(attic, 100, 89.5), 107 + 155 / 2, 1e-6), 'half way up the slope');
+const si = G.slopeInfo(attic, attic.walls[0].slope);
+check(near(si.angle, 40.89, 0.01) && near(si.length, 236.8, 0.1), `slope angle ${si.angle.toFixed(1)}°, ${si.length.toFixed(1)} cm long`);
+const side = G.wallProfile(attic, 1);
+check(JSON.stringify(side) === JSON.stringify([[0, 107], [179, 262], [407.5, 262], [586.5, 107]]), 'side wall top follows the roof: ' + JSON.stringify(side));
+const knee = G.wallProfile(attic, 0);
+check(JSON.stringify(knee) === JSON.stringify([[0, 107], [418, 107]]), 'front wall is a 107 cm knee wall');
+check(near(G.profileMin(side, 150, 250), 107 + (155 * 150) / 179, 1e-6), 'lowest point of a stretch of wall');
+const pieces = G.ceilingPieces(attic);
+const areas = pieces.map((pc) => Math.round(Math.abs(G.area2(pc.poly)) / 2));
+check(pieces.length === 3 && areas.reduce((a, b) => a + b) === Math.round(418 * 586.5), 'ceiling = 2 slopes + flat strip covering the room: ' + areas.join(' + '));
+check(!G.hasSlopes({ points: G.rect(400, 300), height: 250, walls: [{}, {}, {}, {}] }) && JSON.stringify(G.wallProfile({ points: G.rect(400, 300), height: 250, walls: [] }, 0)) === '[[0,250],[400,250]]', 'flat rooms stay flat');
+
 // ---- Photo maths: render a wall of known size with a pinhole camera and measure it back.
 function project(P, cam) {
   // cam: position C, yaw, pitch, focal f, image w h. World: x right, y up, z towards the wall.

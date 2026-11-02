@@ -1,0 +1,131 @@
+{
+ "format": "room-designer",
+ "version": 1,
+ "app": "0.2.0",
+ "project": {
+  "name": "My attic room",
+  "version": 1,
+  "room": {
+   "shape": "rect",
+   "points": [
+    [
+     0,
+     0
+    ],
+    [
+     418,
+     0
+    ],
+    [
+     418,
+     586.5
+    ],
+    [
+     0,
+     586.5
+    ]
+   ],
+   "height": 262,
+   "thickness": 12,
+   "facing": 135,
+   "walls": [
+    {
+     "finish": "paint",
+     "color": "#f4f1ea",
+     "slope": {
+      "knee": 107,
+      "run": 179
+     }
+    },
+    {
+     "finish": "paint",
+     "color": "#f4f1ea"
+    },
+    {
+     "finish": "paint",
+     "color": "#f4f1ea",
+     "slope": {
+      "knee": 107,
+      "run": 179
+     }
+    },
+    {
+     "finish": "paint",
+     "color": "#f4f1ea"
+    }
+   ],
+   "floor": {
+    "type": "wood",
+    "color": "#b98a5a"
+   },
+   "ceiling": {
+    "color": "#ffffff"
+   },
+   "led": {
+    "on": false,
+    "color": "#9b5cff",
+    "mode": "solid",
+    "where": "ceiling",
+    "brightness": 1
+   }
+  },
+  "openings": [
+   {
+    "id": "attic-door",
+    "type": "door",
+    "wall": 3,
+    "along": 200.25,
+    "width": 96.5,
+    "height": 205,
+    "sill": 0,
+    "color": "#f4f1ea"
+   },
+   {
+    "id": "attic-win-1",
+    "type": "window",
+    "wall": 1,
+    "along": 224.5,
+    "width": 99,
+    "height": 130,
+    "sill": 90,
+    "color": "#ffffff"
+   },
+   {
+    "id": "attic-win-2",
+    "type": "window",
+    "wall": 1,
+    "along": 356,
+    "width": 99,
+    "height": 130,
+    "sill": 90,
+    "color": "#ffffff"
+   }
+  ],
+  "items": [
+   {
+    "id": "attic-light",
+    "type": "ceilingLight",
+    "name": "Ceiling light",
+    "w": 40,
+    "d": 40,
+    "h": 10,
+    "color": "#ffffff",
+    "color2": "#ffffff",
+    "mount": "ceiling",
+    "x": 209,
+    "z": 293.25,
+    "rot": 0,
+    "y": 0,
+    "opts": {
+     "on": true
+    }
+   }
+  ],
+  "photos": [],
+  "id": "r-template-attic",
+  "created": 1793620800000,
+  "updated": 1793620800000
+ },
+ "stuff": [],
+ "blobs": {}
+}

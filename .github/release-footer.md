@@ -13,4 +13,6 @@
 
 The Mac and iPhone files are added a little after the others, once their builds finish.
 
+**Ready-made rooms**: `My-attic-room.room` opens in Room Designer (Your rooms → Open room file); it is also under Your rooms → New room. `My-attic-room.glb` is the 3D model for any 3D viewer, and `My-attic-room-preview.png` shows what it looks like.
+
 **Scanning your things with your phone** works from the desktop app: click *Add → My stuff → Scan my stuff → Scan with your phone*, then scan the QR code with your phone (same Wi-Fi). Your rooms, photos and scans stay on your device.

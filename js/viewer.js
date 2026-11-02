@@ -102,8 +102,9 @@
       this.top.addEventListener('change', () => this.onCameraChange());
 
       r.localClippingEnabled = true;
-      this.clipTop = new THREE.Plane(new THREE.Vector3(0, -1, 0), 2.5);
+      // wall glow never shows above the ceiling (sloped or flat) or below the floor
       this.clipBottom = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      this.clipPlanes = [new THREE.Plane(new THREE.Vector3(0, -1, 0), 2.5), this.clipBottom];
       this.applyLighting();
       new ResizeObserver(() => this.resize()).observe(container);
       this.resize();
@@ -201,7 +202,7 @@
         if (!o.userData.glow) return;
         o.material.opacity = (o.userData.glowBase || 0.8) * (n ? 1 : 0.22);
         // wall glow never shows above the ceiling or below the floor
-        o.material.clippingPlanes = [this.clipTop, this.clipBottom];
+        o.material.clippingPlanes = this.clipPlanes;
       });
     }
 
@@ -354,7 +355,7 @@
         const off = it.d / 2 + 0.3;
         return { x: p[0] + w.n[0] * off, z: p[1] + w.n[1] * off, y: it.y || 0, rot: G.facingAngle(w), wall: w.i };
       }
-      if (it.mount === 'ceiling') return { x: it.x, z: it.z, y: room.height - it.h, rot: it.rot || 0 };
+      if (it.mount === 'ceiling') return { x: it.x, z: it.z, y: this.ceilingAt(it.x, it.z) - it.h, rot: it.rot || 0 };
       return { x: it.x, z: it.z, y: it.y || 0, rot: it.rot || 0 };
     }
 
@@ -421,7 +422,10 @@
       const H = room.height;
       const t = room.thickness || 12;
       const walls = (this.walls = G.walls(pts));
-      this.clipTop.constant = H * S;
+      const planes = (this.planes = G.ceilingPlanes(room));
+      const sloped = (this.sloped = G.hasSlopes(room));
+      const profiles = (this.profiles = walls.map((w, i) => G.wallProfile(room, i, planes)));
+      this.clipPlanes = planes.map((p) => new THREE.Plane(new THREE.Vector3(p.a, -1, p.b), p.c * S).normalize()).concat([this.clipBottom]);
       const outer = G.offsetOutward(pts, t);
       this.wallFrames = [];
       this.roomLeds = [];
@@ -450,7 +454,8 @@
       this.roomGroup.add(floor);
       this.floorMesh = floor;
 
-      const ceil = new THREE.Mesh(this.planGeometry(pts, H, false), new THREE.MeshStandardMaterial({ color: (room.ceiling && room.ceiling.color) || '#ffffff', roughness: 0.9 }));
+      const ceilGeo = sloped ? this.slopedCeilingGeometry(room, planes) : this.planGeometry(pts, H, false);
+      const ceil = new THREE.Mesh(ceilGeo, new THREE.MeshStandardMaterial({ color: (room.ceiling && room.ceiling.color) || '#ffffff', roughness: 0.9 }));
       ceil.userData = { kind: 'ceiling', own: true };
       ceil.receiveShadow = true;
       this.roomGroup.add(ceil);
@@ -481,10 +486,12 @@
         this.roomGroup.add(frame);
         this.wallFrames.push(frame);
 
-        const holes = this.wallHoles(openings, i, w.len, H);
+        const prof = profiles[i];
+        const topH = Math.max(...prof.map((q) => q[1]));
+        const holes = this.wallHoles(openings, i, w.len, prof);
         // Inside surface (the part you paint).
-        const surfGeo = this.wallSurface(0, w.len, H, holes);
-        const surf = new THREE.Mesh(surfGeo, this.wallMaterial(room.walls[i] || {}, w.len, H));
+        const surfGeo = this.wallSurface(0, w.len, prof, holes);
+        const surf = new THREE.Mesh(surfGeo, this.wallMaterial(room.walls[i] || {}, w.len, topH));
         surf.receiveShadow = true;
         surf.userData = { kind: 'wall', index: i, own: true };
         frame.add(surf);
@@ -492,14 +499,20 @@
         // Outside, thickness and the dark top edge.
         const s0 = (outer[i][0] - w.a[0]) * w.dir[0] + (outer[i][1] - w.a[1]) * w.dir[1];
         const s1 = (outer[(i + 1) % pts.length][0] - w.a[0]) * w.dir[0] + (outer[(i + 1) % pts.length][1] - w.a[1]) * w.dir[1];
-        const outGeo = this.wallSurface(s0, s1, H, holes);
+        const outGeo = this.wallSurface(s0, s1, prof, holes);
         outGeo.translate(0, 0, -t);
         const parts = [outGeo];
         for (const hl of holes) parts.push(this.reveal(hl, t));
         const shell = new THREE.Mesh(THREE.mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g))), shellMat);
         shell.userData = { kind: 'shell', own: true };
         frame.add(shell);
-        const cap = new THREE.Mesh(this.quadGeo([[0, H, 0], [w.len, H, 0], [s1, H, -t], [s0, H, -t]]), capMat);
+        // the top edge follows the wall's height (sloped under a sloping ceiling)
+        const capQuads = [];
+        for (let k = 1; k < prof.length; k++) {
+          const [u0, h0] = prof[k - 1], [u1, h1] = prof[k];
+          capQuads.push(this.quadGeo([[u0, h0, 0], [u1, h1, 0], [k === prof.length - 1 ? s1 : u1, h1, -t], [k === 1 ? s0 : u0, h0, -t]]));
+        }
+        const cap = new THREE.Mesh(THREE.mergeGeometries(capQuads), capMat);
         cap.userData.own = true;
         frame.add(cap);
 
@@ -511,23 +524,54 @@
           frame.add(m);
         }
 
-        // LED strip around the room.
+        // LED strip around the room: along the floor, or just under the top of each wall (following slopes).
         const led = room.led;
         if (led && led.on) {
           const g = new THREE.Group();
-          const y = led.where === 'floor' ? 6 : H - 3;
-          const fake = { w: w.len - 4, d: 1.6, h: 1.4, color: led.color || '#9b5cff', opts: { mode: led.mode, brightness: led.brightness || 1 } };
-          const strip = C.build(Object.assign({ type: 'ledStrip' }, fake), null);
-          strip.position.set(w.len / 2, y, 1);
-          // keep only the strip and glow; a single light per wall
-          g.add(strip);
-          g.userData.lights = strip.userData.lights;
-          strip.userData.lights = null;
-          g.userData.lights = (g.userData.lights || []).map((l) => Object.assign({}, l, { pos: [w.len / 2, y + (led.where === 'floor' ? 25 : -30), 45], intensity: l.intensity * 0.8 }));
+          const segs = led.where === 'floor' ? [[[2, 9], [w.len - 2, 9]]] : prof.slice(1).map((q, k) => [prof[k], q]);
+          const lights = [];
+          for (const [[u0, h0], [u1, h1]] of segs) {
+            const len = Math.hypot(u1 - u0, h1 - h0);
+            if (len < 8) continue;
+            const fake = { w: len - 4, d: 1.6, h: 1.4, color: led.color || '#9b5cff', opts: { mode: led.mode, brightness: led.brightness || 1 } };
+            const strip = C.build(Object.assign({ type: 'ledStrip' }, fake), null);
+            const holder = new THREE.Group();
+            holder.position.set((u0 + u1) / 2, (h0 + h1) / 2 - 3, 1);
+            holder.rotation.z = Math.atan2(h1 - h0, u1 - u0);
+            holder.add(strip);
+            g.add(holder);
+            if (len > 60) {
+              const mu = (u0 + u1) / 2, mh = (h0 + h1) / 2;
+              for (const l of strip.userData.lights || []) lights.push(Object.assign({}, l, { pos: [mu, led.where === 'floor' ? 35 : mh - 33, 45], intensity: l.intensity * 0.8 * Math.min(1, len / w.len) }));
+            }
+            strip.userData.lights = null;
+          }
+          g.userData.lights = lights.slice(0, 2);
           frame.add(g);
           this.roomLeds.push(g);
         }
       });
+
+      // Plan view: outline of the sloping parts of the ceiling.
+      if (this.slopeLines) this.helpers.remove(this.slopeLines);
+      this.slopeLines = new THREE.Group();
+      this.slopeLabels = [];
+      if (sloped) {
+        const dash = new THREE.LineDashedMaterial({ color: '#ff5a36', dashSize: 0.08, gapSize: 0.06, depthTest: false, transparent: true });
+        for (const pc of G.ceilingPieces(room, planes)) {
+          if (pc.plane.wall < 0) continue;
+          const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pc.poly.map((q) => new THREE.Vector3(q[0] * S, 0.006, q[1] * S))), dash);
+          line.computeLineDistances();
+          line.renderOrder = 5;
+          this.slopeLines.add(line);
+          const sl = room.walls[pc.plane.wall].slope;
+          const info = G.slopeInfo(room, sl);
+          const cx = pc.poly.reduce((a, q) => a + q[0], 0) / pc.poly.length, cz = pc.poly.reduce((a, q) => a + q[1], 0) / pc.poly.length;
+          this.slopeLabels.push({ x: cx, z: cz, text: `Slope ${Math.round(info.angle)}° · ${U.fmtLen(sl.knee)} → ${U.fmtLen(H)}` });
+        }
+      }
+      this.slopeLines.visible = this.view === 'top';
+      this.helpers.add(this.slopeLines);
 
       // Sun shadow covers the whole room.
       const b = G.bounds(pts);
@@ -575,12 +619,13 @@
       return g;
     }
 
-    /** Door and window holes on a wall, clamped to the wall and not overlapping. */
-    wallHoles(openings, i, len, H) {
+    /** Door and window holes on a wall, clamped to the wall (and under its top) and not overlapping. */
+    wallHoles(openings, i, len, prof) {
       const holes = openings.filter((o) => o.wall === i).map((o) => {
         const along = U.clamp(o.along, o.width / 2, len - o.width / 2);
         const sill = o.sill || 0;
-        return { u0: Math.max(1, along - o.width / 2), u1: Math.min(len - 1, along + o.width / 2), v0: sill <= 0.5 ? 0 : sill, v1: Math.min(H - 2, sill + o.height) };
+        const u0 = Math.max(1, along - o.width / 2), u1 = Math.min(len - 1, along + o.width / 2);
+        return { u0, u1, v0: sill <= 0.5 ? 0 : sill, v1: Math.min(G.profileMin(prof, u0, u1) - 2, sill + o.height) };
       }).filter((h) => h.u1 - h.u0 > 2 && h.v1 - h.v0 > 2).sort((a, b) => a.u0 - b.u0);
       const out = [];
       for (const h of holes) {
@@ -591,19 +636,58 @@
       return out;
     }
 
-    /** Wall face from u = a to u = b (cm), height H, with door notches and window holes. UVs in metres. */
-    wallSurface(a, b, H, holes) {
+    /**
+     * Wall face from u = a to u = b (cm) whose top follows prof ([[u, h], ...]), with door notches and
+     * window holes. UVs in metres.
+     */
+    wallSurface(a, b, prof, holes) {
       const doors = holes.filter((h) => h.v0 === 0);
       const wins = holes.filter((h) => h.v0 > 0);
       const pts = [[a, 0]];
       for (const d of doors) pts.push([d.u0, 0], [d.u0, d.v1], [d.u1, d.v1], [d.u1, 0]);
-      pts.push([b, 0], [b, H], [a, H]);
+      pts.push([b, 0], [b, G.profileAt(prof, b)]);
+      for (let k = prof.length - 1; k >= 0; k--) if (prof[k][0] > a + 0.01 && prof[k][0] < b - 0.01) pts.push([prof[k][0], prof[k][1]]);
+      pts.push([a, G.profileAt(prof, a)]);
       const shape = new THREE.Shape(pts.map((p) => new THREE.Vector2(p[0], p[1])));
       for (const w of wins) shape.holes.push(new THREE.Path([[w.u0, w.v0], [w.u1, w.v0], [w.u1, w.v1], [w.u0, w.v1]].map((p) => new THREE.Vector2(p[0], p[1]))));
       const g = new THREE.ShapeGeometry(shape);
       const uv = g.attributes.uv;
       for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) / 100, uv.getY(k) / 100);
       return g;
+    }
+
+    /** Sloped ceiling: each flat piece at its own slant, facing down into the room. */
+    slopedCeilingGeometry(room, planes) {
+      const pos = [], uv = [];
+      for (const pc of G.ceilingPieces(room, planes)) {
+        const pts = pc.poly;
+        const tris = THREE.ShapeUtils.triangulateShape(pts.map((q) => new THREE.Vector2(q[0], q[1])), []);
+        const hAt = (q) => pc.plane.a * q[0] + pc.plane.b * q[1] + pc.plane.c;
+        for (const [a, b0, c0] of tris) {
+          let b = b0, c = c0;
+          const pa = pts[a], pb = pts[b], pc2 = pts[c];
+          const ny = (pb[1] - pa[1]) * (pc2[0] - pa[0]) - (pb[0] - pa[0]) * (pc2[1] - pa[1]);
+          if (ny > 0) { const tmp = b; b = c; c = tmp; }
+          for (const k of [a, b, c]) {
+            pos.push(pts[k][0] * S, hAt(pts[k]) * S, pts[k][1] * S);
+            uv.push(pts[k][0] / 100, pts[k][1] / 100);
+          }
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.computeVertexNormals();
+      return g;
+    }
+
+    /** Ceiling height (cm) above a point of the floor. */
+    ceilingAt(x, z) { return G.ceilingAt(this.room, x, z, this.planes); }
+
+    /** How high the top of wall i is, at its lowest, between u0 and u1 (cm). */
+    wallTop(i, u0, u1) {
+      const prof = (this.profiles && this.profiles[i]) || G.wallProfile(this.room, i);
+      return G.profileMin(prof, Math.max(0, u0), u1);
     }
 
     /** The inside edges of a door/window hole through the thickness of the wall. */
@@ -660,7 +744,8 @@
         rec.wallHidden = rec.it.mount === 'wall' && this.hiddenWalls.has(rec.wall);
         rec.group.visible = !ceilingHidden && !rec.wallHidden;
       }
-      if (this.ceilingMesh) this.ceilingMesh.visible = this.view === 'walk';
+      if (this.ceilingMesh) this.ceilingMesh.visible = this.view === 'walk' || (this.view === '3d' && this.sloped);
+      if (this.slopeLines) this.slopeLines.visible = this.view === 'top';
       const before = this.lastHiddenKey;
       this.lastHiddenKey = Array.from(this.hiddenWalls).join(',');
       if (before !== undefined && before !== this.lastHiddenKey) this.applyLights();
@@ -740,7 +825,15 @@
 
     clampWalk() {
       if (!this.walk.pos) return;
-      this.walk.pos = G.keepInside(this.room.points, this.walk.pos[0], this.walk.pos[1], 40, 40, 0, 0);
+      let [x, z] = G.keepInside(this.room.points, this.walk.pos[0], this.walk.pos[1], 40, 40, 0, 0);
+      // don't walk into a sloping ceiling: step back towards the middle of the room
+      const b = G.bounds(this.room.points);
+      const eye = Math.min(160, this.room.height - 20);
+      for (let k = 0; k < 60 && this.ceilingAt(x, z) < eye + 25; k++) {
+        const dx = b.cx - x, dz = b.cz - z, d = Math.hypot(dx, dz) || 1;
+        x += (dx / d) * 4; z += (dz / d) * 4;
+      }
+      this.walk.pos = [x, z];
       this.updateWalkCamera();
     }
 
@@ -958,7 +1051,7 @@
         const w = this.walls[hit.i];
         d.wall = hit.i;
         d.along = U.round(U.clamp(hit.u + d.offA, d.op.width / 2 + 1, w.len - d.op.width / 2 - 1), 1);
-        if (d.op.type === 'window') d.sill = U.round(U.clamp(hit.v + d.offY, 5, room.height - d.op.height - 5), 1);
+        if (d.op.type === 'window') d.sill = U.round(U.clamp(hit.v + d.offY, 5, Math.max(5, this.wallTop(hit.i, d.along - d.op.width / 2, d.along + d.op.width / 2) - d.op.height - 5)), 1);
         this.previewOpening(d);
         return;
       }
@@ -970,8 +1063,9 @@
         const w = this.walls[hit.i];
         d.wall = hit.i;
         d.along = U.round(U.clamp(hit.u + (d.offA || 0), Math.min(it.w / 2, w.len / 2), Math.max(w.len - it.w / 2, w.len / 2)), 0.5);
-        let y = U.clamp(hit.v + (d.offY || 0), 0, Math.max(0, room.height - it.h));
-        if (room.height - it.h - y < 6) y = room.height - it.h - 1; // snap to just under the ceiling
+        const top = this.wallTop(hit.i, d.along - it.w / 2, d.along + it.w / 2);
+        let y = U.clamp(hit.v + (d.offY || 0), 0, Math.max(0, top - it.h));
+        if (top - it.h - y < 6) y = Math.max(0, top - it.h - 1); // snap to just under the top of the wall
         if (y < 4) y = 0;
         d.y = U.round(y, 0.5);
         const pose = this.itemPose(Object.assign({}, it, { wall: d.wall, along: d.along, y: d.y }));
@@ -984,7 +1078,7 @@
         let x = P.x / S + d.off[0], z = P.z / S + d.off[1];
         [x, z] = G.keepInside(room.points, x, z, it.w, it.d, it.rot || 0, 0);
         d.pose.x = U.round(x, 0.5); d.pose.z = U.round(z, 0.5);
-        d.rec.group.position.set(d.pose.x * S, (room.height - it.h) * S, d.pose.z * S);
+        d.rec.group.position.set(d.pose.x * S, (this.ceilingAt(d.pose.x, d.pose.z) - it.h) * S, d.pose.z * S);
       } else {
         // Floor items can also stand on other things (a lamp on a desk).
         let baseY = 0;
@@ -1075,7 +1169,7 @@
         const w = this.walls && this.walls[i];
         if (!w) return;
         let pts;
-        if (s.kind === 'wall') pts = [[0, 0], [w.len, 0], [w.len, this.room.height], [0, this.room.height]];
+        if (s.kind === 'wall') pts = [[0, 0], [w.len, 0]].concat(((this.profiles && this.profiles[i]) || [[w.len, this.room.height], [0, this.room.height]]).slice().reverse());
         else {
           const op = p.openings.find((o) => o.id === s.id);
           const a = U.clamp(op.along, op.width / 2, w.len - op.width / 2);
@@ -1144,11 +1238,19 @@
           if (this.hiddenWalls && this.hiddenWalls.has(i) && this.view !== 'top') return;
           const mx = (w.a[0] + w.b[0]) / 2, mz = (w.a[1] + w.b[1]) / 2;
           const inset = this.view === 'top' ? -(this.room.thickness || 12) - 26 : 2;
-          const p = this.toScreen(mx + w.n[0] * inset, this.view === 'top' ? 0 : room.height + 10, mz + w.n[1] * inset);
+          const topY = this.profiles && this.profiles[i] ? G.profileAt(this.profiles[i], w.len / 2) : room.height;
+          const p = this.toScreen(mx + w.n[0] * inset, this.view === 'top' ? 0 : topY + 10, mz + w.n[1] * inset);
           if (p.behind) return;
           frag.push(`<div class="lbl wall-lbl" style="transform:translate(${p.x}px,${p.y}px)"><b>${i + 1}</b>${this.view === 'top' ? `<span>${U.fmtLen(w.len)}</span>` : ''}</div>`);
         });
       }
+      if (this.view === 'top' && this.slopeLabels) {
+        for (const l of this.slopeLabels) {
+          const p = this.toScreen(l.x, 0, l.z);
+          frag.push(`<div class="lbl slope-lbl" style="transform:translate(${p.x}px,${p.y}px)">${l.text}</div>`);
+        }
+      }
+      this.updateCompass();
       if (this.measures && this.selected && this.selected.kind === 'item' && this.view !== 'walk') {
         for (const m of this.measures) {
           if (m.dist < 0.5) continue;
@@ -1163,6 +1265,24 @@
       }
       L.innerHTML = frag.join('');
       this.updateCornerHandles();
+    }
+
+    /** Compass in the corner of the view when you've said which way your room faces. */
+    updateCompass() {
+      const f = this.room && this.room.facing;
+      if (f == null || f === '') { if (this.compassEl) this.compassEl.hidden = true; return; }
+      if (!this.compassEl) {
+        this.compassEl = U.h('div.compass', { title: 'North' }, U.h('div.needle', null, U.h('b', null, 'N')));
+        this.el.append(this.compassEl);
+      }
+      let off = 0;
+      if (this.view !== 'top') {
+        const dir = new THREE.Vector3();
+        this.camera.getWorldDirection(dir);
+        off = (Math.atan2(dir.x, -dir.z) * 180) / Math.PI;
+      }
+      this.compassEl.hidden = false;
+      this.compassEl.firstChild.style.transform = `rotate(${-(Number(f) + off)}deg)`;
     }
 
     // ------------------------------------------------------------------ editing the room outline in the top view
@@ -1377,7 +1497,12 @@
     exportGLB() {
       return new Promise((resolve, reject) => {
         const root = new THREE.Group();
+        // the cut-away walls and the ceiling belong in the model too
+        const hidden = [];
+        this.roomGroup.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+        this.itemsGroup.traverse((o) => { if (!o.visible && o.userData.kind === 'item') { hidden.push(o); o.visible = true; } });
         root.add(this.roomGroup.clone(), this.itemsGroup.clone());
+        for (const o of hidden) o.visible = false;
         root.traverse((o) => { if (o.userData.glow || o.userData.sel || o.isLine) o.visible = false; });
         new THREE.GLTFExporter().parse(root, (res) => resolve(new Blob([res], { type: 'model/gltf-binary' })), reject, { binary: true, onlyVisible: true });
       });

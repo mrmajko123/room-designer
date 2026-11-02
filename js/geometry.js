@@ -194,6 +194,125 @@
     return [x, z];
   };
 
+  // ------------------------------------------------------------------ sloped ceilings (attic rooms)
+  // A wall with walls[i].slope = { knee, run } is a low "knee wall" of height knee; the ceiling rises from it
+  // and reaches the room's full height (room.height) after `run` cm of floor. The ceiling is the lowest of
+  // all these sloped planes and the flat ceiling at room.height.
+
+  /** Ceiling planes as h(x, z) = a*x + b*z + c. The first one is the flat ceiling. */
+  G.ceilingPlanes = function (room) {
+    const H = room.height;
+    const planes = [{ a: 0, b: 0, c: H, wall: -1 }];
+    const ws = G.walls(room.points);
+    (room.walls || []).forEach((wl, i) => {
+      const s = wl && wl.slope;
+      const w = ws[i];
+      if (!s || !w || !(s.run > 0) || !(s.knee < H)) return;
+      const k = (H - s.knee) / s.run;
+      planes.push({ a: k * w.n[0], b: k * w.n[1], c: s.knee - k * (w.a[0] * w.n[0] + w.a[1] * w.n[1]), wall: i });
+    });
+    return planes;
+  };
+
+  G.hasSlopes = (room) => (room.walls || []).some((w) => w && w.slope && w.slope.run > 0 && w.slope.knee < room.height);
+
+  /** Ceiling height above a point of the floor. */
+  G.ceilingAt = function (room, x, z, planes) {
+    let h = Infinity;
+    for (const p of planes || G.ceilingPlanes(room)) h = Math.min(h, p.a * x + p.b * z + p.c);
+    return h;
+  };
+
+  /** Slope angle in degrees and the length along the slant for a {knee, run} slope. */
+  G.slopeInfo = (room, s) => {
+    const rise = room.height - s.knee;
+    return { angle: (Math.atan2(rise, s.run) * 180) / Math.PI, length: Math.hypot(rise, s.run), rise };
+  };
+
+  /**
+   * Height of the top of wall i along its length: [[u, h], ...] from u = 0 to u = len, exact (the corners
+   * of the lowest of the ceiling planes along the wall).
+   */
+  G.wallProfile = function (room, i, planes) {
+    planes = planes || G.ceilingPlanes(room);
+    const w = G.walls(room.points)[i];
+    const lines = planes.map((p) => ({ al: p.a * w.a[0] + p.b * w.a[1] + p.c, be: p.a * w.dir[0] + p.b * w.dir[1] }));
+    const at = (u) => Math.min(...lines.map((l) => l.al + l.be * u));
+    const us = [0, w.len];
+    for (let j = 0; j < lines.length; j++) {
+      for (let k = j + 1; k < lines.length; k++) {
+        const db = lines[j].be - lines[k].be;
+        if (Math.abs(db) < 1e-9) continue;
+        const u = (lines[k].al - lines[j].al) / db;
+        if (u > 0.01 && u < w.len - 0.01) us.push(u);
+      }
+    }
+    us.sort((x, y) => x - y);
+    const out = [];
+    for (const u of us) {
+      const h = Math.max(1, at(u));
+      const last = out[out.length - 1];
+      if (last && Math.abs(last[0] - u) < 0.01) continue;
+      out.push([Math.round(u * 100) / 100, Math.round(h * 100) / 100]);
+    }
+    // drop points in the middle of straight stretches
+    return out.filter((p, k) => {
+      if (k === 0 || k === out.length - 1) return true;
+      const a = out[k - 1], b = out[k + 1];
+      const t = (p[0] - a[0]) / (b[0] - a[0]);
+      return Math.abs(a[1] + (b[1] - a[1]) * t - p[1]) > 0.05;
+    });
+  };
+
+  /** Height of a wall profile at u (clamped to the ends). */
+  G.profileAt = function (profile, u) {
+    if (u <= profile[0][0]) return profile[0][1];
+    for (let k = 1; k < profile.length; k++) {
+      const [u1, h1] = profile[k], [u0, h0] = profile[k - 1];
+      if (u <= u1) return h0 + ((h1 - h0) * (u - u0)) / Math.max(1e-9, u1 - u0);
+    }
+    return profile[profile.length - 1][1];
+  };
+
+  /** Lowest point of a wall's top between u0 and u1 (how tall something on that part of the wall can be). */
+  G.profileMin = function (profile, u0, u1) {
+    let m = Math.min(G.profileAt(profile, u0), G.profileAt(profile, u1));
+    for (const [u, h] of profile) if (u > u0 && u < u1) m = Math.min(m, h);
+    return m;
+  };
+
+  /** Clips a polygon to the half-plane A*x + B*z + C <= 0 (Sutherland-Hodgman). */
+  function clipHalf(poly, A, B, C) {
+    const out = [];
+    const f = (p) => A * p[0] + B * p[1] + C;
+    for (let k = 0; k < poly.length; k++) {
+      const p = poly[k], q = poly[(k + 1) % poly.length];
+      const fp = f(p), fq = f(q);
+      if (fp <= 1e-9) out.push(p);
+      if ((fp < -1e-9 && fq > 1e-9) || (fp > 1e-9 && fq < -1e-9)) {
+        const t = fp / (fp - fq);
+        out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+      }
+    }
+    return out;
+  }
+
+  /** The pieces of the ceiling: where each plane is the lowest. [{ poly, plane }] */
+  G.ceilingPieces = function (room, planes) {
+    planes = planes || G.ceilingPlanes(room);
+    const pieces = [];
+    planes.forEach((p, i) => {
+      let poly = room.points.map((q) => q.slice());
+      planes.forEach((o, j) => {
+        if (i === j || !poly.length) return;
+        // keep where p <= o (ties go to the earlier plane)
+        poly = clipHalf(poly, p.a - o.a, p.b - o.b, p.c - o.c + (j < i ? 1e-6 : -1e-6));
+      });
+      if (poly.length >= 3 && Math.abs(G.area2(poly)) > 2) pieces.push({ poly, plane: p });
+    });
+    return pieces;
+  };
+
   if (typeof module !== 'undefined' && module.exports) module.exports = G;
   else (root.RD = root.RD || {}).geo = G;
 })(typeof window !== 'undefined' ? window : globalThis);

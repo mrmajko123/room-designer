@@ -2,6 +2,19 @@
 
 Room Designer version numbers: small updates add 0.0.1 (0.1.0 → 0.1.1), big updates add 0.1 (0.1.x → 0.2.0).
 
+## 0.2.0 - 2026-11-02
+
+Big update: sloped ceilings, and your attic room ready to open.
+
+- **Sloped ceilings (attic rooms)**: pick the low walls the ceiling slopes up from, their height and how far
+  the slope reaches. Walls, doors, windows, lamps, LED strips and wall shelves all follow the slope, the plan
+  view marks the sloping parts with their angle, and you can't walk into the slope in the walk view
+- **My attic room**, built from your measurements: 418 × 586.5 cm, 107 cm walls at the front and back with
+  the ceiling rising at 41° to 262 cm, the door 152 cm from the back-left corner and two 99 cm windows.
+  Pick it under Your rooms → New room, or download `My-attic-room.room` and `My-attic-room.glb` below
+- **Compass**: say which way you face when looking at wall 1, and a compass shows north in every view
+- New room: start from an empty room or a ready-made one
+
 ## 0.1.0 - 2026-11-02
 
 First release of Room Designer: design your room in 3D.

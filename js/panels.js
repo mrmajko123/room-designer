@@ -124,9 +124,19 @@
       }
       el.append(section('Shape & size', shapes, h('div', { style: { height: '10px' } }), size,
         h('div.grid2', { style: { marginTop: '10px' } },
-          field('Ceiling height', lenInput(room.height, (v) => app().change((q) => { q.room.height = v; }, 'Ceiling height'), { min: 150, max: 800, key: 'height' })),
+          field(G.hasSlopes(room) ? 'Highest ceiling' : 'Ceiling height', lenInput(room.height, (v) => app().change((q) => { q.room.height = v; }, 'Ceiling height'), { min: 150, max: 800, key: 'height' })),
           field('Floor area', h('div.hint', { style: { padding: '9px 0' } }, areaText(room.points)))),
         h('p.hint.small', { style: { marginTop: '8px' } }, 'Tip: measure along the floor from corner to corner. Type it in centimetres (350) or metres (3.5m).')));
+
+      // Sloped ceiling (attic rooms)
+      el.append(section('Sloped ceiling', slopeEditor(room, ws),
+        h('p.hint.small', { style: { marginTop: '8px' } }, 'For attic rooms: pick the low walls the ceiling slopes up from. The ceiling height above is the highest point.')));
+
+      // Compass
+      el.append(section('Compass', h('div.row', null,
+        h('span.lab', null, 'Looking at wall 1, you face'),
+        h('div', { style: { width: '130px' } }, selectBox([['', 'Not set']].concat(COMPASS.map(([deg, name]) => [deg, `${deg}° ${name}`])),
+          room.facing == null ? '' : String(room.facing), (v) => app().change((q) => { q.room.facing = v === '' ? null : Number(v); }, 'Compass'), 'facing')))));
 
       // Paint
       const allSame = room.walls.every((w) => (w.finish || 'paint') === 'paint' && w.color === room.walls[0].color);
@@ -165,6 +175,32 @@
       el.append(section('LED lights', ledBody));
     });
   };
+
+  const COMPASS = [[0, 'N'], [45, 'NE'], [90, 'E'], [135, 'SE'], [180, 'S'], [225, 'SW'], [270, 'W'], [315, 'NW']].concat(
+    Array.from({ length: 24 }, (_, k) => [k * 15, '']).filter(([d]) => d % 45 !== 0)).sort((a, b) => a[0] - b[0]);
+
+  /** Low "knee" walls the ceiling slopes up from: on/off, height and how far the slope reaches. */
+  function slopeEditor(room, ws, only) {
+    const box = h('div.slopes');
+    ws.forEach((w, i) => {
+      if (only != null && i !== only) return;
+      const sl = (room.walls[i] || {}).slope;
+      const row = h('div.slope-row');
+      row.append(h('div.row', null, h('span.lab', null, only != null ? 'Ceiling slopes up from this wall' : `Wall ${i + 1} (${U.fmtLen(w.len)})`),
+        toggle(!!sl, (on) => app().change((q) => {
+          q.room.walls[i].slope = on ? { knee: Math.min(110, Math.round(q.room.height * 0.4)), run: Math.round(Math.min(200, (G.bounds(q.room.points).l || 300) / 3)) } : null;
+        }, on ? 'Sloped ceiling' : 'Flat ceiling'), 'slope' + i)));
+      if (sl) {
+        const info = G.slopeInfo(room, sl);
+        row.append(h('div.grid2', null,
+          field('Low wall height', lenInput(sl.knee, (v) => app().change((q) => { q.room.walls[i].slope.knee = v; }, 'Slope'), { min: 0, max: room.height - 5, key: 'knee' + i })),
+          field('Slope reaches the top after', lenInput(sl.run, (v) => app().change((q) => { q.room.walls[i].slope.run = v; }, 'Slope'), { min: 5, max: 2000, key: 'run' + i }))),
+        h('p.hint.small', null, `${Math.round(info.angle)}° slope, ${U.fmtLen(info.length)} along the slant. "Reaches the top after" is measured along the floor, from the wall.`));
+      }
+      box.append(row);
+    });
+    return box;
+  }
 
   function rangeInput(value, min, max, step, onChange) {
     const r = h('input', { type: 'range', min, max, step, value });
@@ -478,6 +514,7 @@
     el.append(body);
     body.append(section('Length', h('div.row', null, h('span.lab', null, 'Wall length'),
       h('div', { style: { width: '130px' } }, lenInput(w.len, (v) => app().setWallLength(i, v), { min: 20, max: 5000, key: 'wlen' })))));
+    body.append(section('Sloped ceiling', slopeEditor(p.room, ws, i)));
 
     const finish = wall.finish || 'paint';
     const tiles = h('div.tiles', null, T.WALLS.map((f) => {
