@@ -11,6 +11,6 @@
 | iPhone / iPad | `Room-Designer-…-iPhone-unsigned.ipa` | Apple requires signing: install it with your Apple ID using AltStore or Sideloadly. |
 | Any computer, no install | `Room-Designer-…-Web.zip` | Unzip it and open `index.html` in Chrome, Edge or Firefox. |
 
-The iPhone file is added a little after the others, once its build finishes.
+The Mac and iPhone files are added a little after the others, once their builds finish.
 
 **Scanning your things with your phone** works from the desktop app: click *Add → My stuff → Scan my stuff → Scan with your phone*, then scan the QR code with your phone (same Wi-Fi). Your rooms, photos and scans stay on your device.

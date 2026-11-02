@@ -2,13 +2,6 @@
 
 Room Designer version numbers: small updates add 0.0.1 (0.1.0 → 0.1.1), big updates add 0.1 (0.1.x → 0.2.0).
 
-## 0.1.1 - 2026-11-02
-
-Small update.
-
-- Quick photo scan from your phone: side and top photos now ask you to mark the item's corners before
-  saving, so the sides of your dresser show the dresser and not the room behind it
-
 ## 0.1.0 - 2026-11-02
 
 First release of Room Designer: design your room in 3D.

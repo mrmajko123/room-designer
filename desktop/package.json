@@ -1,7 +1,7 @@
 {
   "name": "room-designer-desktop",
   "productName": "Room Designer",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "Design your room in 3D.",
   "main": "main.js",
   "private": true,

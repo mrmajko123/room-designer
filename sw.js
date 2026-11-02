@@ -1,5 +1,5 @@
 /* Room Designer service worker: caches the app so it opens offline. Your rooms live in IndexedDB, not here. */
-const CACHE = 'room-designer-0.1.1';
+const CACHE = 'room-designer-0.1.0';
 const SHELL = [
   './',
   './index.html',

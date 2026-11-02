@@ -80,8 +80,6 @@ jobs:
         include:
           - os: windows-latest
             target: --win
-          - os: macos-latest
-            target: --mac
           - os: ubuntu-latest
             target: --linux
     runs-on: ${{ matrix.os }}
@@ -103,7 +101,6 @@ jobs:
           name: desktop-${{ matrix.os }}
           path: |
             desktop/dist/*.exe
-            desktop/dist/*.dmg
             desktop/dist/*.AppImage
             desktop/dist/*.deb
           if-no-files-found: error
@@ -164,6 +161,41 @@ jobs:
           path: out/*
           if-no-files-found: error
 
+  mac:
+    # Mac machines often have a queue, so the release doesn't wait for this; the Mac disk images are
+    # attached to the release whenever they are ready.
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      V: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the Mac disk images
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm install --no-audit --no-fund
+          npm run dist -- --mac
+      - name: Add the Mac app to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 120); do
+            if gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+              gh release upload "v$V" desktop/dist/*.dmg --repo "$GITHUB_REPOSITORY" --clobber
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "The release was not published, so the Mac app was not attached."
+          exit 1
+
   ios:
     # Runs alongside everything else; the release doesn't wait for it. Mac machines often have a
     # queue, so the iPhone app is attached to the release whenever this finishes.
@@ -213,7 +245,7 @@ jobs:
           exit 1
 
   release:
-    # Publishes as soon as the tests and the Windows, Mac, Linux, Android and web builds are done.
+    # Publishes as soon as the tests and the Windows, Linux, Android and web builds are done.
     needs: [check, test, web, desktop, android]
     if: >-
       !cancelled() && needs.check.outputs.release == 'true' &&
