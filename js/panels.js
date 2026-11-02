@@ -126,7 +126,7 @@
         h('div.grid2', { style: { marginTop: '10px' } },
           field('Ceiling height', lenInput(room.height, (v) => app().change((q) => { q.room.height = v; }, 'Ceiling height'), { min: 150, max: 800, key: 'height' })),
           field('Floor area', h('div.hint', { style: { padding: '9px 0' } }, areaText(room.points)))),
-        h('p.hint.small', { style: { marginTop: '8px' } }, 'Tip: measure along the floor from corner to corner. You can type 3.5m, 350, or 11\' 6".')));
+        h('p.hint.small', { style: { marginTop: '8px' } }, 'Tip: measure along the floor from corner to corner. Type it in centimetres (350) or metres (3.5m).')));
 
       // Paint
       const allSame = room.walls.every((w) => (w.finish || 'paint') === 'paint' && w.color === room.walls[0].color);

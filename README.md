@@ -8,7 +8,7 @@ Windows, Mac, Linux, Android or iPhone (or the web version, no install).
 
 ## What you can do
 
-- **Real sizes.** Rectangle, L-shaped or any shape room. Type the wall lengths (`3.5m`, `350`, `11' 6"`)
+- **Real sizes, in centimetres and metres.** Rectangle, L-shaped or any shape room. Type the wall lengths (`350` or `3.5m`)
   or drag the corners in the plan view. Set the ceiling height, add doors and windows.
 - **Build the room from photos.** Take a photo of each wall, drag four dots onto the wall's corners and
   Room Designer straightens the photo, works out how long the wall is (from the ceiling height and the

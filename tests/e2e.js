@@ -438,7 +438,7 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   await pp.goto(BASE + '?nowelcome');
   await pp.waitForFunction(() => RD.store.project && !document.querySelector('#app.loading'));
   check(await pp.isVisible('.bottom-nav'), 'phone: bottom menu');
-  check(await pp.evaluate(() => RD.util.units === 'imperial'), 'phone (en-US): feet and inches');
+  check(await pp.evaluate(() => RD.util.units === 'metric' && /cm$/.test(document.querySelector('#panel-room .len-wrap i').textContent)), 'phone with US English still uses centimetres');
   check(!(await pp.isVisible('#side .panel:not([hidden])')) || await pp.evaluate(() => document.querySelector('#side').classList.contains('closed')), 'phone: tools start closed so the room is visible');
   await pp.tap('.bottom-nav [data-tab=add]');
   await pp.waitForTimeout(400);

@@ -473,7 +473,7 @@
 
   function saveSettings() {
     const s = S.settings;
-    RD.db.setSetting('settings', { units: s.units, night: s.night, quality: s.quality, cutaway: s.cutaway, snap: s.snap, welcomed: s.welcomed, toldDrag: s.toldDrag }).catch(() => {});
+    RD.db.setSetting('settings', { night: s.night, quality: s.quality, cutaway: s.cutaway, snap: s.snap, welcomed: s.welcomed, toldDrag: s.toldDrag }).catch(() => {});
   }
 
   function applySettings() {
@@ -533,7 +533,6 @@
     };
     const sw = (val, set) => { const i = h('input', { type: 'checkbox', checked: val }); i.addEventListener('change', () => set(i.checked)); return h('span.switch', null, i, h('span')); };
     body.append(
-      row('Units', seg([['metric', 'cm / m'], ['imperial', 'ft / in']], s.units, (v) => { s.units = v; applySettings(); saveSettings(); refreshPanels(); if (app.tab === 'add') P.renderAdd(); app.viewer.requestRender(); })),
       row('Graphics', seg([['high', 'Best'], ['low', 'Fast']], s.quality, (v) => { s.quality = v; applySettings(); saveSettings(); }), 'Use Fast on older phones'),
       row('Hide walls in front', sw(s.cutaway !== false, (v) => { s.cutaway = v; applySettings(); saveSettings(); }), 'So you can see into the room'),
       row('Snap to walls', sw(s.snap !== false, (v) => { s.snap = v; applySettings(); saveSettings(); }), 'Furniture slides flat against walls'));
@@ -660,9 +659,9 @@
   async function start() {
     try {
       const saved = await RD.db.setting('settings', null);
-      const lang = (navigator.language || 'en').toLowerCase();
-      Object.assign(S.settings, { units: /^en-(us|lr|mm)$/.test(lang) ? 'imperial' : 'metric' }, saved || {});
-      U.setUnits(S.settings.units);
+      Object.assign(S.settings, saved || {});
+      S.settings.units = 'metric'; // Room Designer always measures in centimetres and metres
+      U.setUnits('metric');
       await S.loadStuff();
       app.viewer = new RD.Viewer(U.$('#stage'), viewerHooks);
       bindUI();

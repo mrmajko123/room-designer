@@ -6,7 +6,7 @@ Room Designer version numbers: small updates add 0.0.1 (0.1.0 → 0.1.1), big up
 
 First release of Room Designer: design your room in 3D.
 
-- **Your real room size**: rectangle, L-shaped or any shape. Type wall lengths (3.5m, 350, 11' 6") or drag
+- **Your real room size** in centimetres and metres: rectangle, L-shaped or any shape. Type wall lengths (350 or 3.5m) or drag
   corners in the plan view. Ceiling height, doors, windows and balcony doors
 - **Build it from photos**: take a photo of each wall, drag 4 dots onto its corners, and Room Designer
   straightens the photo, measures the wall's length and puts the photo (or just its colour) on your 3D wall
