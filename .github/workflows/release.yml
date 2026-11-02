@@ -1,0 +1,243 @@
+# Builds Room Designer for every platform and publishes a GitHub Release whenever the version in
+# package.json has not been released yet. Bump the version with `node scripts/bump.js patch|minor`.
+name: Release
+
+# Runs on every push; the first job stops straight away when this version is already released.
+on:
+  push:
+    branches: [main, 'claude/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      code: ${{ steps.v.outputs.code }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          IFS=. read -r MA MI PA <<< "$V"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "code=$((MA * 10000 + MI * 100 + PA))" >> "$GITHUB_OUTPUT"
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "v$V is already released; nothing to do."
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "Building release v$V"
+          fi
+
+  test:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+
+  web:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      V: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          node scripts/prepare-web.js "build/Room Designer"
+          mkdir -p out
+          (cd build && zip -qr "../out/Room-Designer-$V-Web.zip" "Room Designer")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: out/*
+          if-no-files-found: error
+
+  desktop:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: macos-latest
+            target: --mac
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build installers
+        working-directory: desktop
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm install --no-audit --no-fund
+          npm run dist -- ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+          if-no-files-found: error
+
+  android:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      V: ${{ needs.check.outputs.version }}
+      CODE: ${{ needs.check.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Create the Android project
+        working-directory: mobile
+        run: |
+          npm install --no-audit --no-fund
+          npm run android
+          sed -i -E "s/versionCode [0-9]+/versionCode $CODE/; s/versionName \"[^\"]*\"/versionName \"$V\"/" android/app/build.gradle
+          # the camera opens from the "take a photo" buttons
+          grep -q 'android.permission.CAMERA' android/app/src/main/AndroidManifest.xml || \
+            sed -i 's#</manifest>#    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>#' android/app/src/main/AndroidManifest.xml
+          grep -E "versionCode|versionName" android/app/build.gradle
+      - name: Build the APK
+        working-directory: mobile/android
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            ./gradlew assembleRelease --no-daemon \
+              -Pandroid.injected.signing.store.file="$RUNNER_TEMP/release.keystore" \
+              -Pandroid.injected.signing.store.password="$KS_PASS" \
+              -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+              -Pandroid.injected.signing.key.password="$KEY_PASS"
+            APK=app/build/outputs/apk/release/app-release.apk
+          else
+            echo "No signing secrets set: building a debug-signed APK."
+            ./gradlew assembleDebug --no-daemon
+            APK=app/build/outputs/apk/debug/app-debug.apk
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp "$APK" "$GITHUB_WORKSPACE/out/Room-Designer-$V-Android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/*
+          if-no-files-found: error
+
+  ios:
+    # Runs alongside everything else; the release doesn't wait for it. Mac machines often have a
+    # queue, so the iPhone app is attached to the release whenever this finishes.
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      V: ${{ needs.check.outputs.version }}
+      CODE: ${{ needs.check.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Create the iOS project
+        working-directory: mobile
+        run: |
+          npm install --no-audit --no-fund
+          npm run ios
+          PL=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Take photos of your room and your things.'" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Use photos of your room and your things.'" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Save pictures of your room designs.'" $PL || true
+      - name: Build an unsigned IPA
+        working-directory: mobile/ios/App
+        run: |
+          if [ -d App.xcworkspace ]; then TARGET="-workspace App.xcworkspace"; else TARGET="-project App.xcodeproj"; fi
+          xcodebuild $TARGET -scheme App -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build MARKETING_VERSION="$V" CURRENT_PROJECT_VERSION="$CODE" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir -p Payload "$GITHUB_WORKSPACE/out"
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qr "$GITHUB_WORKSPACE/out/Room-Designer-$V-iPhone-unsigned.ipa" Payload
+      - name: Add the iPhone app to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 120); do
+            if gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+              gh release upload "v$V" out/*.ipa --repo "$GITHUB_REPOSITORY" --clobber
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "The release was not published, so the iPhone app was not attached."
+          exit 1
+
+  release:
+    # Publishes as soon as the tests and the Windows, Mac, Linux, Android and web builds are done.
+    needs: [check, test, web, desktop, android]
+    if: >-
+      !cancelled() && needs.check.outputs.release == 'true' &&
+      needs.test.result == 'success' && needs.web.result == 'success' &&
+      needs.desktop.result == 'success' && needs.android.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      V: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Write release notes
+        run: |
+          node scripts/changelog-notes.js "$V" > notes.md
+          cat .github/release-footer.md >> notes.md
+          ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Room Designer ${{ needs.check.outputs.version }}
+          body_path: notes.md
+          files: dist/*
+          make_latest: true

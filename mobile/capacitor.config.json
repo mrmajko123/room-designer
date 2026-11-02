@@ -1,0 +1,14 @@
+{
+  "appId": "io.github.mrmajko123.roomdesigner",
+  "appName": "Room Designer",
+  "webDir": "www",
+  "backgroundColor": "#151827",
+  "android": {
+    "backgroundColor": "#151827"
+  },
+  "ios": {
+    "backgroundColor": "#151827",
+    "contentInset": "never",
+    "scheme": "RoomDesigner"
+  }
+}

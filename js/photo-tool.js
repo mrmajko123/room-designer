@@ -48,8 +48,11 @@
     layout() {
       const bw = this.el.clientWidth, bh = this.el.clientHeight;
       if (!bw || !bh) return;
-      const s = Math.min(bw / this.W, bh / this.H);
+      // leave a margin round the photo so corners that are out of the picture can still be placed
+      const s = Math.min(bw / this.W, bh / this.H) * 0.84;
       this.scale = s;
+      this.padX = (bw / s - this.W) / 2;
+      this.padY = (bh / s - this.H) / 2;
       const w = this.W * s, hh = this.H * s;
       Object.assign(this.stage.style, { width: w + 'px', height: hh + 'px' });
       this.svg.setAttribute('viewBox', `0 0 ${w} ${hh}`);
@@ -86,9 +89,10 @@
       const move = (ev) => {
         // on touch, the corner moves half as fast as the finger for precision
         const k = (touch ? 0.5 : 1) / this.scale;
+        const px = this.padX || 0, py = this.padY || 0;
         this.corners[i] = [
-          U.clamp(start.c[0] + (ev.clientX - start.x) * k, 0, this.W),
-          U.clamp(start.c[1] + (ev.clientY - start.y) * k, 0, this.H),
+          U.clamp(start.c[0] + (ev.clientX - start.x) * k, -px, this.W + px),
+          U.clamp(start.c[1] + (ev.clientY - start.y) * k, -py, this.H + py),
         ];
         this.draw();
         placeLoupe();
@@ -112,7 +116,7 @@
       const [cx, cy] = this.corners[i];
       const zoom = Math.max(2.5, 4 * (this.scale || 1));
       const span = 150 / zoom;
-      ctx.fillStyle = '#000';
+      ctx.fillStyle = '#222';
       ctx.fillRect(0, 0, 150, 150);
       ctx.drawImage(this.img, cx - span / 2, cy - span / 2, span, span, 0, 0, 150, 150);
       // the marked outline around this corner

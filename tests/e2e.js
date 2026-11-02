@@ -270,7 +270,10 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
 
   // ------------------------------------------------------------ your own dresser from a photo
   const dresser = await makeDresserPhoto(page);
-  await page.evaluate(() => RD.photos.openStuff());
+  await page.evaluate(() => { RD.scanning.openAdd(); });
+  await page.waitForSelector('dialog.modal[open] .choice');
+  check(await page.isDisabled('.choice:has-text("Scan with your phone")'), 'phone scanning needs the desktop app (browser)');
+  await page.click('.choice:has-text("Make it from photos")');
   await page.waitForSelector('dialog.modal[open] button:has-text("Choose a photo")');
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('dialog.modal[open] button:has-text("Choose a photo")')]);
   await chooser.setFiles({ name: 'dresser.jpg', mimeType: 'image/jpeg', buffer: dataUrlBuffer(dresser.url) });
@@ -292,6 +295,79 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   check(await page.evaluate(() => RD.store.stuff.size) === 1, 'dresser is in "My stuff"');
   await page.waitForTimeout(500);
   await snap(page, '06-my-dresser.png');
+
+  // ------------------------------------------------------------ a 3D scan: check the size before it goes into My stuff
+  await page.evaluate(async () => {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 0.45), new THREE.MeshStandardMaterial({ color: '#d9c3a5' }));
+    body.position.y = 0.5;
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.03), new THREE.MeshStandardMaterial({ color: '#333333' }));
+    knob.position.set(0, 0.7, 0.19);
+    g.add(body, knob);
+    const buf = await new Promise((res, rej) => new THREE.GLTFExporter().parse(g, res, rej, { binary: true }));
+    window.__glb = new Blob([buf], { type: 'model/gltf-binary' });
+  });
+  await page.evaluate(() => { RD.scanning.reviewModel({ blob: window.__glb, name: 'Scanned dresser.glb' }); });
+  await page.waitForSelector('dialog.modal[open] .scan-preview canvas');
+  const dimsOf = () => page.evaluate(() => ['w', 'd', 'h'].map((k) => parseFloat(document.querySelector(`dialog.modal[open] input[data-k=${k}]`).value)));
+  let dims = await dimsOf();
+  check(dims.join() === '80,45,100', 'scan size read from the 3D file: ' + dims.join(' x '));
+  check((await page.inputValue('dialog.modal[open] .wiz-side input.text')) === 'Scanned dresser', 'name taken from the file');
+  await page.fill('dialog.modal[open] input[data-k=w]', '100');
+  await page.press('dialog.modal[open] input[data-k=w]', 'Enter');
+  dims = await dimsOf();
+  check(dims.join() === '100,56.3,125', 'changing the width keeps proportions: ' + dims.join(' x '));
+  await page.click('dialog.modal[open] button:has-text("Turn front")');
+  dims = await dimsOf();
+  check(dims[0] === 56.3 && dims[1] === 100, 'turning the scan swaps width and depth: ' + dims.join(' x '));
+  for (let i = 0; i < 3; i++) await page.click('dialog.modal[open] button:has-text("Turn front")');
+  await page.uncheck('dialog.modal[open] .wiz-side input[type=checkbox]');
+  await page.fill('dialog.modal[open] input[data-k=d]', '50');
+  await page.press('dialog.modal[open] input[data-k=d]', 'Enter');
+  dims = await dimsOf();
+  check(dims.join() === '100,50,125', 'without proportions only the depth changes: ' + dims.join(' x '));
+  await snap(page, '06b-check-size.png');
+  await page.click('dialog.modal[open] footer button:has-text("Add to My stuff")');
+  await page.waitForFunction(() => RD.store.project.items.some((i) => i.type === 'custom' && RD.store.stuff.get(i.customId).shape === 'model'), null, { timeout: 15000 });
+  await page.waitForTimeout(800);
+  const placedScan = await page.evaluate(() => {
+    const it = RD.store.project.items.find((i) => i.type === 'custom' && RD.store.stuff.get(i.customId).shape === 'model');
+    const rec = RD.app.viewer.items.get(it.id);
+    const box = new THREE.Box3().setFromObject(rec.model);
+    const s = box.getSize(new THREE.Vector3());
+    const def = RD.store.stuff.get(it.customId);
+    return { w: it.w, d: it.d, h: it.h, size: [s.x, s.y, s.z].map((v) => Math.round(v * 100)).sort((a, b) => a - b), thumb: !!def.thumbId };
+  });
+  check(placedScan.w === 100 && placedScan.d === 50 && placedScan.h === 125, 'scanned dresser added with the size you typed');
+  check(placedScan.size.join() === '50,100,125', 'the 3D scan in the room has that size: ' + placedScan.size.join(' x ') + ' cm');
+  check(placedScan.thumb, 'My stuff gets a picture of the scan');
+  await snap(page, '06c-scan-in-room.png');
+
+  // the QR code window of the desktop app (phone link simulated)
+  await page.evaluate(() => {
+    window.roomDesktop = { phoneLink: {
+      start: async () => ({ urls: ['http://192.168.1.5:43822/scan.html#k', 'http://10.0.0.7:43822/scan.html#k'], port: 43822, token: 'k' }),
+      stop: () => { window.__stopped = true; },
+      on: (cb) => { window.__emit = cb; return () => { window.__emit = null; }; },
+    } };
+    RD.scanning.openAdd();
+  });
+  await page.click('.choice:has-text("Scan with your phone")');
+  await page.waitForSelector('dialog.modal[open] .qr svg');
+  check((await page.textContent('.qr-url')).includes('192.168.1.5'), 'QR window shows the phone link');
+  await page.evaluate(() => window.__emit({ type: 'connected', device: 'iPhone' }));
+  check(/connected/i.test(await page.textContent('.link-status')), 'QR window shows when the phone connects');
+  await snap(page, '06d-qr.png');
+  await page.evaluate(async () => {
+    const data = new Uint8Array(await window.__glb.arrayBuffer());
+    window.__emit({ type: 'file', kind: 'model', name: 'Desk scan.glb', mime: 'model/gltf-binary', data });
+    window.__emit({ type: 'done', kind: 'model' });
+  });
+  await page.waitForSelector('dialog.modal[open] .scan-preview canvas');
+  check((await page.inputValue('dialog.modal[open] .wiz-side input.text')) === 'Desk scan', 'scan from the phone opens the size check');
+  check(await page.evaluate(() => window.__stopped === true), 'phone link stops when the QR window closes');
+  await page.click('dialog.modal[open] footer button:has-text("Cancel")');
+  await page.evaluate(() => { delete window.roomDesktop; });
 
   // ------------------------------------------------------------ plan view and corner editing
   await page.click('.view-seg [data-view=top]');
@@ -335,7 +411,7 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   await page.click('#rooms-btn');
   const [roomDl] = await Promise.all([page.waitForEvent('download'), page.click('dialog.modal[open] button:has-text("Save room file")')]);
   const file = JSON.parse(fs.readFileSync(await roomDl.path(), 'utf8'));
-  check(file.format === 'room-designer' && file.stuff.length === 1 && Object.keys(file.blobs).length >= 4, 'room file has the room, my stuff and the photos');
+  check(file.format === 'room-designer' && file.stuff.length === 2 && Object.keys(file.blobs).length >= 6, 'room file has the room, my stuff, scans and photos');
   await page.click('#rooms-btn');
   const [roomChooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('dialog.modal[open] button:has-text("Open room file")')]);
   await roomChooser.setFiles(await roomDl.path());
@@ -375,6 +451,10 @@ const dataUrlBuffer = (url) => Buffer.from(url.split(',')[1], 'base64');
   await pp.waitForTimeout(300);
   check(await pp.isVisible('#inspector .insp-head'), 'phone: Edit opens the item sheet');
   await snap(pp, '10-phone.png');
+  await pp.evaluate(() => { RD.scanning.openAdd(); });
+  await pp.waitForSelector('dialog.modal[open] .choice');
+  check(await pp.isVisible('.choice:has-text("Open a 3D scan")'), 'phone: add your own item with a 3D scan from this phone');
+  await snap(pp, '11-phone-add-own.png');
   await phone.close();
 
   await browser.close();

@@ -774,6 +774,15 @@
     const sideColor = it.color || (def && def.sideColor) || '#bbbbbb';
     const shape = (def && def.shape) || 'box';
     const { w, d, h } = it;
+    if (shape === 'model') {
+      const tpl = def.model && ctx.model(def.model.blobId, def.model.name);
+      if (tpl) { g.add(RD.models.fit(tpl, def.model.rot, w, d, h)); return; }
+      // still loading: a light outline of the size
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), T.mat('#9aa3ad', { opacity: 0.35 }));
+      m.position.y = h / 2;
+      g.add(m);
+      return;
+    }
     if (shape === 'cutout') {
       const m = new THREE.MeshStandardMaterial({ map: front, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 });
       const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
@@ -796,10 +805,12 @@
       return;
     }
     const sm = side ? new THREE.MeshStandardMaterial({ map: side, roughness: 0.7 }) : T.mat(sideColor, { rough: 0.7 });
-    const top = T.mat(U.shade(sideColor, 0.06), { rough: 0.7 });
+    const topTex = def && def.top && ctx.texture(def.top.texId);
+    const top = topTex ? new THREE.MeshStandardMaterial({ map: topTex, roughness: 0.7 }) : T.mat(U.shade(sideColor, 0.06), { rough: 0.7 });
     const fm = front ? new THREE.MeshStandardMaterial({ map: front, roughness: 0.65 }) : T.mat(sideColor);
     // BoxGeometry material order: +x, -x, +y, -y, +z (front), -z
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [sm, sm, top, top, fm, T.mat(sideColor)]);
+    const bottom = T.mat(U.shade(sideColor, -0.2), { rough: 0.8 });
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [sm, sm, top, bottom, fm, T.mat(sideColor)]);
     m.position.y = h / 2;
     m.castShadow = m.receiveShadow = true;
     g.add(m);

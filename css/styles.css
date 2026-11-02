@@ -373,7 +373,8 @@ dialog.modal > footer button.danger { color: #fff; background: var(--danger); bo
 .wiz-side { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-bottom: 6px; }
 .ce-host { flex: 1; min-height: 260px; position: relative; }
 .mark-wrap { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
-.corner-editor { position: absolute; inset: 0; display: grid; place-items: center; background: #0d0e10; border-radius: 12px; overflow: hidden; }
+.corner-editor { position: absolute; inset: 0; display: grid; place-items: center; background: #26292e; border-radius: 12px; overflow: hidden; }
+.ce-stage { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15); }
 .ce-stage { position: relative; touch-action: none; user-select: none; }
 .ce-stage img { width: 100%; height: 100%; display: block; pointer-events: none; }
 .ce-svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
@@ -396,9 +397,42 @@ dialog.modal > footer button.danger { color: #fff; background: var(--danger); bo
 .radio input { margin-top: 2px; accent-color: var(--accent); }
 .radio.on { border-color: var(--accent); background: var(--accent-soft); }
 .radio small { display: block; color: var(--ink-3); }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: #ddd; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--ink-2); }
 .legend span::before { content: attr(data-n); display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #ff5a36; color: #fff; font-size: 10px; font-weight: 700; margin-right: 5px; }
 .photo-tip { color: var(--ink-2); font-size: 13px; }
+
+/* adding your own things */
+.choices { display: flex; flex-direction: column; gap: 10px; }
+.choice {
+  display: flex; gap: 14px; align-items: flex-start; text-align: left; padding: 14px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--panel);
+}
+.choice:hover:not(:disabled) { border-color: var(--ink-3); }
+.choice.primary { border-color: var(--accent); background: var(--accent-soft); }
+.choice-ic { width: 42px; height: 42px; border-radius: 12px; background: var(--panel-2); display: grid; place-items: center; flex: none; color: var(--accent); }
+.choice.primary .choice-ic { background: var(--accent); color: #fff; }
+.choice-txt { display: flex; flex-direction: column; gap: 3px; }
+.choice-txt b { font-size: 15px; }
+.choice-txt span { color: var(--ink-2); font-size: 13px; }
+dialog.qr-dialog { width: min(720px, calc(100vw - 24px)); }
+.qr-layout { display: grid; grid-template-columns: 260px 1fr; gap: 22px; align-items: start; }
+.qr-box { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.qr { width: 260px; height: 260px; background: #fff; border-radius: 14px; padding: 8px; box-shadow: var(--shadow); }
+.qr svg { width: 100%; height: 100%; display: block; }
+.qr-url { font-size: 11px; color: var(--ink-3); word-break: break-all; text-align: center; }
+.link-status { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); font-weight: 600; margin: 4px 0 10px; }
+.link-status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink-3); flex: none; animation: pulse 1.4s ease-in-out infinite; }
+.link-status.ok .dot { background: var(--good); animation: none; }
+.link-status.busy .dot { background: var(--accent); }
+@keyframes pulse { 50% { opacity: 0.3; } }
+details.help summary { cursor: pointer; color: var(--ink-2); font-weight: 600; margin-bottom: 6px; }
+.scan-preview { position: relative; flex: 1; min-height: 280px; border-radius: 12px; overflow: hidden; background: #e9ecef; }
+.scan-preview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.scan-labels { position: absolute; inset: 0; pointer-events: none; }
+@media (max-width: 760px) {
+  .qr-layout { grid-template-columns: 1fr; }
+  .qr { width: 220px; height: 220px; }
+}
 
 /* menu */
 .menu-list { display: flex; flex-direction: column; gap: 2px; }

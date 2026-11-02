@@ -256,11 +256,12 @@
         if (addState.cat !== 'all' && addState.cat !== cat.id) continue;
         const cards = [];
         if (cat.id === 'mine') {
-          if (!q) cards.push(h('button.card.add-own', { onclick: () => RD.photos.openStuff() }, h('span.pic', { html: I.camera }), 'Add from photo'));
+          if (!q) cards.push(h('button.card.add-own', { onclick: () => RD.scanning.openAdd() }, h('span.pic', { html: I.scanqr }), 'Scan my stuff'));
           for (const def of mine) {
             if (!match(def.name)) continue;
             const pic = h('span.pic');
-            if (def.front && def.front.texId) RD.db.blobUrl(def.front.texId).then((u) => { if (u) pic.style.backgroundImage = `url(${u})`; });
+            const picId = def.thumbId || (def.front && def.front.texId);
+            if (picId) RD.db.blobUrl(picId).then((u) => { if (u) pic.style.backgroundImage = `url(${u})`; });
             const more = h('button.card-more', { title: 'Edit or delete', 'aria-label': 'Edit ' + def.name, html: I.more });
             more.addEventListener('click', (e) => { e.stopPropagation(); app().stuffMenu(def); });
             cards.push(h('div.card', { role: 'button', tabindex: 0, onclick: () => app().addCustom(def) }, pic, h('span.nm', null, def.name), more));
@@ -277,7 +278,7 @@
         if (!cards.length) continue;
         any = true;
         el.append(h('div.cat-title', null, cat.name), h('div.cards', null, cards));
-        if (cat.id === 'mine' && !mine.length) el.append(h('p.hint.small', { style: { marginTop: '8px' } }, 'Take a photo of your own dresser, desk or anything else, type its size, and it appears in your room looking like the real thing.'));
+        if (cat.id === 'mine' && !mine.length) el.append(h('p.hint.small', { style: { marginTop: '8px' } }, 'Scan your own dresser, desk or anything else in 3D with your phone, check its size, and it appears in your room looking like the real thing.'));
       }
       if (!any) el.append(h('p.empty', null, 'Nothing found. Try another word, or add your own item from a photo.'));
     });
@@ -311,9 +312,9 @@
     }
     el.append(p.photos.length ? grid : h('p.empty', null, 'No photos yet.'));
     el.append(section('Your own furniture',
-      h('p.hint', null, 'Make your dresser, desk, bed or anything else from a photo of it, so your room looks like your real room.'),
+      h('p.hint', null, 'Scan your dresser, desk, bed or anything else in 3D with your phone, so your room looks like your real room.'),
       h('div', { style: { height: '10px' } }),
-      h('button.btn.block', { onclick: () => RD.photos.openStuff() }, icon('camera'), 'Add my own item from a photo')));
+      h('button.btn.block.primary', { onclick: () => RD.scanning.openAdd() }, icon('scanqr'), 'Scan my own stuff')));
   };
 
   // ------------------------------------------------------------------ selection panel
@@ -439,7 +440,7 @@
       h('button.btn', { onclick: () => app().duplicateSelected() }, icon('copy'), 'Duplicate'),
       h('button.btn.danger', { onclick: () => app().deleteSelected() }, icon('trash'), 'Delete'),
       h('button.btn', { onclick: () => upd((t) => { t.locked = !t.locked; }, it.locked ? 'Unlock' : 'Lock') }, icon(it.locked ? 'lock' : 'unlock'), it.locked ? 'Locked' : 'Lock in place'),
-      it.type === 'custom' && def ? h('button.btn', { onclick: () => RD.photos.openStuff(def) }, icon('photo'), 'Edit photo') : null)));
+      it.type === 'custom' && def ? h('button.btn', { onclick: () => (def.shape === 'model' ? RD.scanning.reviewModel(null, { def }) : RD.photos.openStuff(def)) }, icon(def.shape === 'model' ? 'box3d' : 'photo'), def.shape === 'model' ? 'Edit scan' : 'Edit photo') : null)));
   }
 
   function openingInspector(el, op) {

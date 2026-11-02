@@ -320,15 +320,27 @@
     buildItem(it, shapeKey) {
       const group = new THREE.Group();
       group.userData = { kind: 'item', id: it.id };
-      const ctx = {
-        texture: (id) => this.texture(id),
-        custom: (id) => this.hooks.stuff(id),
-      };
+      const ctx = this.buildContext();
       const model = C.build(it, ctx);
       model.scale.setScalar(S);
       group.add(model);
       this.itemsGroup.add(group);
       return { it, group, model, shapeKey };
+    }
+
+    /** What item builders need: pictures, "my stuff" and loaded 3D scans. */
+    buildContext() {
+      return {
+        texture: (id) => this.texture(id),
+        custom: (id) => this.hooks.stuff(id),
+        model: (blobId, name) => RD.models.get(blobId, name, () => this.modelReady()),
+      };
+    }
+
+    /** A 3D scan finished loading: rebuild the things that use it. */
+    modelReady() {
+      for (const rec of this.items.values()) if (rec.it.type === 'custom') rec.shapeKey = '';
+      this.sync();
     }
 
     /** Where an item sits, in centimetres: {x, y, z, rot}. */
@@ -1385,7 +1397,7 @@
         this.thumbScene.add(dl, new THREE.HemisphereLight('#ffffff', '#888888', 0.8));
         this.thumbCam = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
       }
-      const g = C.build(Object.assign({ opts: {} }, it), { texture: (id) => this.texture(id), custom: (id) => this.hooks.stuff(id) });
+      const g = C.build(Object.assign({ opts: {} }, it), this.buildContext());
       g.scale.setScalar(S);
       if (it.mount === 'ceiling') g.rotation.x = 0.0;
       this.thumbScene.add(g);

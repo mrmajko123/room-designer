@@ -182,7 +182,8 @@
   ];
 
   /** Create or edit one of "my stuff". */
-  async function openStuff(existing) {
+  async function openStuff(existing, preset) {
+    preset = preset || {};
     const def = existing ? U.clone(existing) : {
       id: U.uid('s'), name: 'My dresser', shape: 'box', w: 80, d: 45, h: 100, sideColor: '#d9cbb5', front: null, side: null, created: Date.now(), rev: 0,
     };
@@ -190,7 +191,11 @@
     let editor = null, lastRect = null;
     let hTouched = !!existing;
     let tolerance = def.tolerance == null ? 30 : def.tolerance;
-    let sideImgRec = def.side ? { photoId: def.side.photoId, corners: def.side.corners } : null;
+    // extra photos of the side and the top (optional, box-shaped things only)
+    const extra = {
+      side: def.side ? { photoId: def.side.photoId, corners: def.side.corners } : preset.side ? { file: preset.side } : null,
+      top: def.top ? { photoId: def.top.photoId, corners: def.top.corners } : preset.top ? { file: preset.top } : null,
+    };
 
     const host = h('div.ce-host');
     const photoCol = h('div.wiz-photo');
@@ -200,7 +205,7 @@
     const sizeBox = h('div.grid3');
     const tolRow = h('div');
     const colorBox = h('div');
-    const sideBtn = h('button.btn', { type: 'button' });
+    const extraBox = h('div.field');
 
     const sizeField = (label, key) => {
       const input = h('input.len.text', { type: 'text', inputmode: 'decimal', value: U.lenInputValue(def[key]) });
@@ -239,21 +244,47 @@
       colorBox.append(h('div.color-row', null, input, h('span.hint', null, def.shape === 'cutout' ? 'Shadow colour' : 'Colour of the sides and top')));
     }
     function drawSideBtn() {
-      sideBtn.innerHTML = '';
-      sideBtn.append(h('span', { html: I.photo }), sideImgRec ? 'Change side photo' : 'Add a side photo (optional)');
-      sideBtn.hidden = def.shape !== 'box';
+      extraBox.innerHTML = '';
+      if (def.shape !== 'box') return;
+      extraBox.append(h('span', null, 'More photos (optional)'));
+      const row = h('div.btn-row');
+      for (const [slot, label] of [['side', 'side'], ['top', 'top']]) {
+        const rec = extra[slot];
+        const txt = !rec ? `Add ${label} photo` : rec.corners ? `${label[0].toUpperCase() + label.slice(1)} photo ✓` : `Mark ${label} photo`;
+        row.append(h('button.btn' + (rec && !rec.corners ? '.primary' : ''), { type: 'button', onclick: () => editExtra(slot, label) }, h('span', { html: I.photo }), txt));
+      }
+      extraBox.append(row, h('p.hint.small', null, 'A photo of the side and the top makes your item look real from every angle.'));
     }
-    sideBtn.addEventListener('click', async () => {
-      const files = await U.pickFiles({});
-      if (!files.length) return;
-      const ph = await U.readPhoto(files[0]);
-      const sideImg = await U.loadImage(URL.createObjectURL(ph.blob));
-      const c = await PT.markCorners(sideImg, 'Mark the side', null, 'Drag the 4 dots onto the corners of the side of your item.');
-      if (!c) return;
-      const id = await RD.db.putBlob(ph.blob, { kind: 'stuff-photo' });
-      sideImgRec = { photoId: id, corners: c, img: sideImg, focal35: ph.focal35 };
+    async function loadExtra(rec) {
+      if (rec.img) return;
+      if (rec.file) {
+        const ph = await U.readPhoto(rec.file);
+        rec.photoId = await RD.db.putBlob(ph.blob, { kind: 'stuff-photo', focal35: ph.focal35 });
+        rec.focal35 = ph.focal35;
+        rec.img = await U.loadImage(URL.createObjectURL(ph.blob));
+        rec.file = null;
+      } else if (rec.photoId) {
+        const b = await RD.db.getBlob(rec.photoId);
+        const br = await RD.db.getBlobRecord(rec.photoId);
+        if (b) { rec.img = await U.loadImage(URL.createObjectURL(b)); rec.focal35 = br && br.focal35; }
+      }
+    }
+    async function editExtra(slot, label) {
+      const rec = extra[slot] || {};
+      if (!extra[slot]) {
+        const files = await U.pickFiles({});
+        if (!files.length) return;
+        rec.file = files[0];
+      }
+      await loadExtra(rec);
+      if (!rec.img) return;
+      const c = await PT.markCorners(rec.img, `Mark the ${label}`, rec.corners, `Drag the 4 dots onto the corners of the ${label} of your item.`);
+      if (c) rec.corners = c;
+      if (!c && !extra[slot]) return;
+      rec.changed = true;
+      extra[slot] = rec;
       drawSideBtn();
-    });
+    }
 
     const refresh = U.debounce(() => {
       if (!editor) return;
@@ -308,7 +339,7 @@
       h('label.field', null, h('span', null, 'Preview'), preview),
       h('div.field', null, h('span', null, 'What kind of thing is it?'), shapeRadios), tolRow,
       h('div.field', null, h('span', null, 'Real size (measure it)'), sizeBox), hint,
-      colorBox, sideBtn);
+      colorBox, extraBox);
     const body = h('div.wiz', null, photoCol, side);
 
     const res = await U.modal(existing ? 'Edit ' + def.name : 'Add your own item', body, [
@@ -317,6 +348,7 @@
     ], {
       wide: true,
       onOpen: async () => {
+        if (preset.front) { await setPhoto(preset.front); return; }
         if (def.front && def.front.photoId) {
           const b = await RD.db.getBlob(def.front.photoId);
           const rec = await RD.db.getBlobRecord(def.front.photoId);
@@ -334,18 +366,22 @@
     const full = PT.rectify(img, corners, { focal35, maxOut: 1024, maxSource: 2400, cutout: def.shape === 'cutout', tolerance });
     const texId = await RD.db.putBlob(await canvasBlob(full.canvas, def.shape === 'cutout'), { kind: 'stuff-front' });
     def.front = { photoId, corners, texId, aspect: full.aspect };
-    if (sideImgRec && def.shape === 'box') {
-      if (sideImgRec.img) {
-        const s = PT.rectify(sideImgRec.img, sideImgRec.corners, { focal35: sideImgRec.focal35, maxOut: 768, maxSource: 2000 });
-        const sid = await RD.db.putBlob(await canvasBlob(s.canvas), { kind: 'stuff-side' });
-        def.side = { photoId: sideImgRec.photoId, corners: sideImgRec.corners, texId: sid };
-      }
-    } else if (def.shape !== 'box') def.side = null;
+    for (const slot of ['side', 'top']) {
+      const rec = extra[slot];
+      if (def.shape !== 'box') { def[slot] = null; continue; }
+      if (!rec || !(rec.changed || rec.file)) continue;
+      await loadExtra(rec);
+      if (!rec.img) continue;
+      const c = rec.corners || [[0, rec.img.naturalHeight], [rec.img.naturalWidth, rec.img.naturalHeight], [rec.img.naturalWidth, 0], [0, 0]];
+      const r = PT.rectify(rec.img, c, { focal35: rec.focal35, maxOut: 768, maxSource: 2000 });
+      const tid = await RD.db.putBlob(await canvasBlob(r.canvas), { kind: 'stuff-' + slot });
+      def[slot] = { photoId: rec.photoId, corners: c, texId: tid };
+    }
     def.rev = (def.rev || 0) + 1;
     def.mount = def.shape === 'flat' ? 'wall' : 'floor';
     await RD.store.saveStuff(def);
     if (!existing) app().addCustom(def);
-    else app().refreshStuff(def);
+    else app().refreshStuff(def, existing);
     U.toast(existing ? 'Saved' : `${def.name} added to your room`);
     return def;
   }

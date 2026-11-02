@@ -203,20 +203,24 @@
     });
   };
 
-  app.refreshStuff = function (def) {
-    // copies already in the room keep their size unless it was never changed
-    app.change((p) => p.items.forEach((it) => { if (it.customId === def.id) { it.name = def.name; } }), 'Update ' + def.name);
+  app.refreshStuff = function (def, old) {
+    // copies in the room follow the new name, and the new size unless you resized them yourself
+    app.change((p) => p.items.forEach((it) => {
+      if (it.customId !== def.id) return;
+      if (!old || it.name === old.name) it.name = def.name;
+      if (!old || (it.w === old.w && it.d === old.d && it.h === old.h)) { it.w = def.w; it.d = def.d; it.h = def.h; }
+    }), 'Update ' + def.name);
     app.viewer.sync();
     if (app.tab === 'add') P.renderAdd();
   };
 
   app.stuffMenu = async function (def) {
-    const v = await U.modal(def.name, h('p', null, 'Change the photo, size or type of this item, or delete it.'), [
+    const v = await U.modal(def.name, h('p', null, def.shape === 'model' ? 'Change the size or the way up of this 3D scan, or delete it.' : 'Change the photo, size or type of this item, or delete it.'), [
       { label: 'Delete', value: 'del', danger: true },
       { label: 'Add to room', value: 'add' },
       { label: 'Edit', value: 'edit', primary: true },
     ]);
-    if (v === 'edit') RD.photos.openStuff(def);
+    if (v === 'edit') { if (def.shape === 'model') RD.scanning.reviewModel(null, { def }); else RD.photos.openStuff(def); }
     if (v === 'add') app.addCustom(def);
     if (v === 'del') {
       const used = S.project.items.filter((i) => i.customId === def.id).length;
@@ -411,7 +415,11 @@
     for (const w of p.room.walls) if (w.photo) { ids.add(w.photo.photoId); ids.add(w.photo.texId); }
     if (p.room.floor.texId) ids.add(p.room.floor.texId);
     for (const it of p.items) if (it.opts && it.opts.image) ids.add(it.opts.image);
-    for (const d of stuffDefs) for (const part of [d.front, d.side]) if (part) { ids.add(part.photoId); ids.add(part.texId); }
+    for (const d of stuffDefs) {
+      for (const part of [d.front, d.side, d.top]) if (part) { ids.add(part.photoId); ids.add(part.texId); }
+      if (d.model) ids.add(d.model.blobId);
+      ids.add(d.thumbId);
+    }
     ids.delete(undefined); ids.delete(null);
     return Array.from(ids);
   }
@@ -423,7 +431,7 @@
     const blobs = {};
     for (const id of blobIds(p, defs)) {
       const rec = await RD.db.getBlobRecord(id);
-      if (rec && rec.blob) blobs[id] = { data: await U.blobToDataURL(rec.blob), focal35: rec.focal35 || null, kind: rec.kind || null };
+      if (rec && rec.blob) blobs[id] = { data: await U.blobToDataURL(rec.blob), focal35: rec.focal35 || null, kind: rec.kind || null, name: rec.name || null };
     }
     const file = { format: 'room-designer', version: 1, app: RD.VERSION, project: p, stuff: defs, blobs };
     const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
@@ -436,7 +444,7 @@
       if (data.format !== 'room-designer' || !data.project) throw new Error('This is not a Room Designer file.');
       for (const [id, b] of Object.entries(data.blobs || {})) {
         const blob = await U.dataURLToBlob(b.data);
-        await RD.db.put('blobs', { id, blob, type: blob.type, created: Date.now(), focal35: b.focal35, kind: b.kind });
+        await RD.db.put('blobs', { id, blob, type: blob.type, created: Date.now(), focal35: b.focal35, kind: b.kind, name: b.name });
       }
       for (const d of data.stuff || []) await S.saveStuff(d);
       const p = data.project;
@@ -624,6 +632,8 @@
       const files = Array.from(e.dataTransfer.files || []);
       const roomFile = files.find((f) => /\.room$|json/i.test(f.name + f.type));
       if (roomFile) { importRoom(roomFile); return; }
+      const scan = files.find((f) => RD.models.isModelName(f.name));
+      if (scan) { RD.scanning.reviewModel({ blob: scan, name: scan.name }); return; }
       const imgs = files.filter((f) => /^image\//.test(f.type));
       if (imgs.length) app.addRoomPhotos(false, imgs);
     });

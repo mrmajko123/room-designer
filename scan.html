@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Scan your stuff · Room Designer</title>
+  <meta name="theme-color" content="#16181c">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/scan.css">
+</head>
+<body>
+  <header class="bar">
+    <img src="icons/icon.svg" alt="" width="30" height="30">
+    <b>Room Designer</b>
+    <span id="conn" class="conn">Connecting…</span>
+  </header>
+
+  <main>
+    <section id="home" class="screen">
+      <h1>Scan your stuff</h1>
+      <p class="lead">Make a 3D copy of your dresser, desk, bed or anything else. It goes straight to your computer, where you check its size.</p>
+      <button class="option primary" data-go="scan3d">
+        <span class="ic">◆</span>
+        <span><b>3D scan</b><small>A real 3D model, from every side. Uses a free scanner app.</small></span>
+      </button>
+      <button class="option" data-go="photos">
+        <span class="ic">▣</span>
+        <span><b>Quick scan with photos</b><small>3 photos: front, side and top. Best for boxy things like dressers.</small></span>
+      </button>
+    </section>
+
+    <section id="scan3d" class="screen" hidden>
+      <button class="back" data-go="home">‹ Back</button>
+      <h1>3D scan</h1>
+      <ol class="steps">
+        <li>
+          <b>Scan your item with a free 3D scanner app.</b>
+          <div class="apps">
+            <a href="https://scaniverse.com" target="_blank" rel="noopener"><b>Scaniverse</b><small>Free · iPhone &amp; Android</small></a>
+            <a href="https://poly.cam" target="_blank" rel="noopener"><b>Polycam</b><small>iPhone &amp; Android</small></a>
+            <a href="https://www.kiriengine.app" target="_blank" rel="noopener"><b>KIRI Engine</b><small>iPhone &amp; Android</small></a>
+          </div>
+          <p class="tip">Clear space around the item so you can walk all the way round it. Move slowly, keep the whole item on screen and scan in good light. iPhones with LiDAR (Pro models) get the size exactly right.</p>
+        </li>
+        <li>
+          <b>Export the scan to your phone.</b>
+          <p class="tip">In the app, tap Share or Export and pick <b>GLB</b> (or OBJ, USDZ, PLY or STL). Save it to Files or Downloads.</p>
+        </li>
+        <li>
+          <b>Send it to your computer.</b>
+          <label class="big-btn">
+            <input id="model-input" type="file" hidden>
+            Choose the 3D file
+          </label>
+        </li>
+      </ol>
+    </section>
+
+    <section id="photos" class="screen" hidden>
+      <button class="back" data-go="home">‹ Back</button>
+      <h1>Quick scan with photos</h1>
+      <p class="lead">Take the photos as straight on as you can, with the whole item in the picture.</p>
+      <div class="slots">
+        <label class="slot" data-step="front">
+          <input type="file" accept="image/*" capture="environment" hidden>
+          <span class="pic"></span>
+          <span class="txt"><b>Front</b><small>Stand straight in front of it.</small></span>
+          <span class="tag need">Needed</span>
+        </label>
+        <label class="slot" data-step="side">
+          <input type="file" accept="image/*" capture="environment" hidden>
+          <span class="pic"></span>
+          <span class="txt"><b>Side</b><small>Stand straight to its left or right.</small></span>
+          <span class="tag">Optional</span>
+        </label>
+        <label class="slot" data-step="top">
+          <input type="file" accept="image/*" capture="environment" hidden>
+          <span class="pic"></span>
+          <span class="txt"><b>Top</b><small>Hold your phone above it, pointing down.</small></span>
+          <span class="tag">Optional</span>
+        </label>
+      </div>
+      <button id="send-photos" class="big-btn" disabled>Send to computer</button>
+    </section>
+
+    <section id="sending" class="screen center" hidden>
+      <div class="spinner"></div>
+      <h1 id="sending-title">Sending…</h1>
+      <div class="progress"><div id="bar"></div></div>
+      <p id="sending-note" class="lead">Keep this page open.</p>
+    </section>
+
+    <section id="sent" class="screen center" hidden>
+      <div class="check">✓</div>
+      <h1>Sent!</h1>
+      <p class="lead">Look at your computer: check the size, then add it to My stuff.</p>
+      <button class="big-btn" data-go="home">Scan another item</button>
+    </section>
+
+    <section id="problem" class="screen center" hidden>
+      <div class="check bad">!</div>
+      <h1 id="problem-title">Can't reach your computer</h1>
+      <p id="problem-text" class="lead">Make sure your phone is on the same Wi-Fi as your computer and the "Scan with your phone" window is still open.</p>
+      <button class="big-btn" id="retry">Try again</button>
+    </section>
+  </main>
+  <script src="js/phone-scan.js"></script>
+</body>
+</html>
