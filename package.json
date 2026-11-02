@@ -1,0 +1,20 @@
+{
+  "name": "room-designer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Design your room in 3D: real sizes, walls from your photos, LEDs, shelves, closets and your own furniture.",
+  "license": "MIT",
+  "scripts": {
+    "start": "node tests/serve.js 8080",
+    "test": "node tests/unit.js && node tests/e2e.js",
+    "vendor": "node scripts/build-vendor.js",
+    "version:patch": "node scripts/bump.js patch",
+    "version:minor": "node scripts/bump.js minor",
+    "web": "node scripts/prepare-web.js build/www"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "^1.56.0",
+    "three": "0.186.1"
+  }
+}

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Room Designer</title>
+  <meta name="description" content="Design your room in 3D: real sizes, wall colours from your photos, LEDs, shelves, closets and your own furniture.">
+  <meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16181c" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app" class="loading">
+    <header class="topbar">
+      <button id="rooms-btn" class="room-btn" title="Your rooms, saving and settings">
+        <span class="logo" aria-hidden="true"></span>
+        <span id="room-name" class="room-name">Room Designer</span>
+        <span class="chev" data-icon="chevron"></span>
+      </button>
+      <div class="seg view-seg" role="tablist" aria-label="View">
+        <button data-view="3d" class="on" title="3D view (1)"><span data-icon="cube"></span><span class="txt">3D</span></button>
+        <button data-view="top" title="Floor plan from above (2)"><span data-icon="plan"></span><span class="txt">Plan</span></button>
+        <button data-view="walk" title="Walk around inside (3)"><span data-icon="walk"></span><span class="txt">Walk</span></button>
+      </div>
+      <div class="top-actions">
+        <button id="undo-btn" class="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" data-icon="undo" disabled></button>
+        <button id="redo-btn" class="icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" data-icon="redo" disabled></button>
+        <button id="night-btn" class="icon-btn" title="Day / night (N)" aria-label="Switch between day and night" data-icon="moon"></button>
+        <button id="shot-btn" class="icon-btn hide-phone" title="Save a picture of your room" aria-label="Save a picture" data-icon="camera"></button>
+      </div>
+    </header>
+
+    <main class="main">
+      <aside id="side" class="side sheet" aria-label="Tools">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <nav class="tabs" role="tablist">
+          <button data-tab="room" class="on"><span data-icon="room"></span>Room</button>
+          <button data-tab="add"><span data-icon="sofa"></span>Add</button>
+          <button data-tab="photos"><span data-icon="photo"></span>Photos</button>
+        </nav>
+        <div class="panel" id="panel-room"></div>
+        <div class="panel" id="panel-add" hidden></div>
+        <div class="panel" id="panel-photos" hidden></div>
+      </aside>
+
+      <section id="stage" class="stage">
+        <div id="sel-bar" class="sel-bar" hidden></div>
+        <div id="walk-pad" class="walk-pad" hidden>
+          <button data-walk="fwd" aria-label="Walk forward">▲</button>
+          <button data-walk="left" aria-label="Turn left">◀</button>
+          <button data-walk="back" aria-label="Walk back">▼</button>
+          <button data-walk="right" aria-label="Turn right">▶</button>
+        </div>
+        <div id="view-hint" class="view-hint" hidden></div>
+        <div class="stage-tools">
+          <button id="focus-btn" class="icon-btn float" title="Show the whole room" aria-label="Show the whole room" data-icon="focus"></button>
+        </div>
+      </section>
+
+      <aside id="inspector" class="inspector sheet" hidden aria-label="Selected"></aside>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Tools">
+      <button data-tab="room"><span data-icon="room"></span>Room</button>
+      <button data-tab="add"><span data-icon="sofa"></span>Add</button>
+      <button data-tab="photos"><span data-icon="photo"></span>Photos</button>
+      <button data-action="shot"><span data-icon="camera"></span>Picture</button>
+    </nav>
+    <div class="boot" id="boot"><div class="spinner"></div><p>Loading your room…</p></div>
+  </div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="js/vendor/three.bundle.js"></script>
+  <script src="js/version.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/geometry.js"></script>
+  <script src="js/homography.js"></script>
+  <script src="js/textures.js"></script>
+  <script src="js/catalog.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/viewer.js"></script>
+  <script src="js/photo-tool.js"></script>
+  <script src="js/photos.js"></script>
+  <script src="js/panels.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
